@@ -103,7 +103,7 @@ largely unaffected.
 | `video_cache.py` | Lazy caching: `ensure_cached(url)` returns a local path, downloading via yt-dlp only if not already indexed. `warm_cache()` walks the whole library (used by the standalone `python3 video_cache.py` pre-warm run). Index is a JSON file (`url -> local path`), written atomically. |
 | `player.py` | Thin mpv subprocess wrapper. One subprocess per video; `skip()` just terminates it. |
 | `input_device.py` | Input abstraction. Currently `KeyboardInput` (w/s or arrows, Enter/Space, k, q) built for the old menu-tree model -- **will be replaced** per the interaction model above, not just extended. |
-| `menu.py` | Currently a discrete state machine: Genre list -> Era list -> shuffle -> play loop. **Will be replaced** with the dual-dial live-tuning model above. |
+| `menu.py` | Currently a discrete state machine: Genre list -> Era list -> shuffle -> play loop, reshuffling and looping forever once the set is exhausted until skip/quit. **Will be replaced** with the dual-dial live-tuning model above. |
 | `main.py` | Entry point; dependency check (mpv installed? yt-dlp importable?) before touching the menu. |
 | `library_server.py` | Standalone HTTP endpoint (no auth, LAN-only) for replacing `config/library.csv` from the network without ssh/scp, and for triggering/monitoring a `video_cache.warm_cache()` run with a persisted failure log (`config.WARM_CACHE_LOG`). Not imported by `main.py`. |
 

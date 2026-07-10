@@ -58,24 +58,25 @@ class MenuController:
                 return None
 
     def _play_shuffled(self, genre, era, tracks):
-        playlist = tracks[:]
-        random.shuffle(playlist)
-        print(f"\nPlaying {len(playlist)} track(s) from {genre} / {era}.")
+        print(f"\nPlaying {len(tracks)} track(s) from {genre} / {era} on shuffle -- loops forever.")
         print("Press 'k' to skip a track, 'q' to stop and return to the menu.\n")
 
-        for track in playlist:
-            label = f"{track['artist']} - {track['song']}" if track["artist"] else track["url"]
-            print(f"Checking cache: {label}")
-            try:
-                local_path = video_cache.ensure_cached(track["url"])
-            except Exception as e:
-                print(f"  Could not fetch, skipping: {e}")
-                continue
+        while True:
+            playlist = tracks[:]
+            random.shuffle(playlist)
+            for track in playlist:
+                label = f"{track['artist']} - {track['song']}" if track["artist"] else track["url"]
+                print(f"Checking cache: {label}")
+                try:
+                    local_path = video_cache.ensure_cached(track["url"])
+                except Exception as e:
+                    print(f"  Could not fetch, skipping: {e}")
+                    continue
 
-            print(f"Now playing: {label}")
-            return_to_menu = self._play_with_skip_listener(local_path)
-            if return_to_menu:
-                return
+                print(f"Now playing: {label}")
+                return_to_menu = self._play_with_skip_listener(local_path)
+                if return_to_menu:
+                    return
 
     def _play_with_skip_listener(self, local_path):
         """

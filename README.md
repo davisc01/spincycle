@@ -4,7 +4,9 @@ A Raspberry Pi 4 powered music video jukebox, built into a 3D-printed case
 styled like an old car stereo: two rotary dials up front (genre on the
 left, era on the right) and a horizontal LCD in the middle. Turn the dials
 like tuning a radio -- stop turning, and it starts loading and playing a
-shuffled set of music videos on the connected TV over HDMI. Videos are
+shuffled, continuously-looping set of music videos on the connected TV
+over HDMI (once every track's played, it reshuffles and keeps going).
+Videos are
 sourced from YouTube via yt-dlp and lazily cached to local storage so
 playback never depends on the network once a video's been played once.
 
