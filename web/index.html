@@ -3,12 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Jukebox</title>
+  <title>Spin Cycle</title>
+  <link rel="icon" type="image/png" sizes="128x128" href="/images/spin_cycle_icon_128.png">
+  <link rel="icon" type="image/png" sizes="256x256" href="/images/spin_cycle_icon_256.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/images/spin_cycle_icon_512.png">
+  <meta name="theme-color" content="#241812">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header>
-    <h1>Jukebox</h1>
+    <img class="logo" src="/images/spin_cycle_logo_full.png" alt="Spin Cycle">
     <button id="settings-toggle" type="button" aria-expanded="false">Settings</button>
   </header>
 
@@ -16,18 +20,30 @@
     <button id="cache-warning" type="button" hidden></button>
 
     <div class="picker-row">
-      <label>
-        Genre
-        <select id="genre-select">
+      <div class="dial-picker">
+        <span class="dial-caption">Genre</span>
+        <div class="dial" id="genre-dial">
+          <button type="button" class="dial-step dial-step-prev" aria-label="Previous genre">‹</button>
+          <div class="dial-knob"><div class="dial-indicator"></div></div>
+          <button type="button" class="dial-step dial-step-next" aria-label="Next genre">›</button>
+        </div>
+        <div class="dial-readout" id="genre-readout"></div>
+        <select id="genre-select" class="dial-select">
           <option value="">-- pick a genre --</option>
         </select>
-      </label>
-      <label>
-        Era
-        <select id="era-select">
+      </div>
+      <div class="dial-picker">
+        <span class="dial-caption">Era</span>
+        <div class="dial" id="era-dial">
+          <button type="button" class="dial-step dial-step-prev" aria-label="Previous era">‹</button>
+          <div class="dial-knob"><div class="dial-indicator"></div></div>
+          <button type="button" class="dial-step dial-step-next" aria-label="Next era">›</button>
+        </div>
+        <div class="dial-readout" id="era-readout"></div>
+        <select id="era-select" class="dial-select">
           <option value="">-- pick an era --</option>
         </select>
-      </label>
+      </div>
     </div>
 
     <p id="status-message">Loading...</p>

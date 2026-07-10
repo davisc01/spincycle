@@ -37,9 +37,102 @@
     select.value = selected || "";
   }
 
+  // -- rotary dial controls ---------------------------------------------
+  //
+  // Mirrors the target hardware's rotary encoders (see CLAUDE.md). The
+  // <select> stays the source of truth and accessible fallback -- the
+  // dial just drives it via select.value + a dispatched "change" event,
+  // so it reuses the existing change listeners below rather than talking
+  // to the API directly.
+
+  const DIAL_DRAG_PX_PER_STEP = 24;
+  const DIAL_SWEEP_DEG = 135; // indicator travels -135deg..+135deg
+
+  function createDial(select, dialEl, readoutEl) {
+    const knob = dialEl.querySelector(".dial-knob");
+    const indicator = dialEl.querySelector(".dial-indicator");
+    const prevBtn = dialEl.querySelector(".dial-step-prev");
+    const nextBtn = dialEl.querySelector(".dial-step-next");
+
+    function setIndex(newIndex) {
+      const count = select.options.length;
+      if (count === 0) return;
+      const wrapped = ((newIndex % count) + count) % count;
+      if (select.selectedIndex === wrapped) return;
+      select.selectedIndex = wrapped;
+      select.dispatchEvent(new Event("change"));
+    }
+
+    function step(delta) {
+      setIndex(select.selectedIndex + delta);
+    }
+
+    prevBtn.addEventListener("click", () => step(-1));
+    nextBtn.addEventListener("click", () => step(1));
+
+    let wheelAccum = 0;
+    knob.addEventListener(
+      "wheel",
+      (event) => {
+        event.preventDefault();
+        wheelAccum += event.deltaY;
+        if (Math.abs(wheelAccum) >= 40) {
+          step(wheelAccum > 0 ? 1 : -1);
+          wheelAccum = 0;
+        }
+      },
+      { passive: false }
+    );
+
+    let dragStartY = null;
+    let dragStartIndex = 0;
+
+    knob.addEventListener("pointerdown", (event) => {
+      dragStartY = event.clientY;
+      dragStartIndex = select.selectedIndex;
+      knob.setPointerCapture(event.pointerId);
+    });
+
+    knob.addEventListener("pointermove", (event) => {
+      if (dragStartY === null) return;
+      const deltaY = dragStartY - event.clientY;
+      const steps = Math.round(deltaY / DIAL_DRAG_PX_PER_STEP);
+      if (steps !== 0) {
+        setIndex(dragStartIndex + steps);
+      }
+    });
+
+    function endDrag(event) {
+      if (dragStartY === null) return;
+      dragStartY = null;
+      if (knob.hasPointerCapture(event.pointerId)) {
+        knob.releasePointerCapture(event.pointerId);
+      }
+    }
+    knob.addEventListener("pointerup", endDrag);
+    knob.addEventListener("pointercancel", endDrag);
+
+    function render() {
+      const count = select.options.length;
+      const index = select.selectedIndex;
+      const fraction = count > 1 ? index / (count - 1) : 0;
+      const angle = -DIAL_SWEEP_DEG + fraction * (2 * DIAL_SWEEP_DEG);
+      indicator.style.setProperty("--angle", `${angle}deg`);
+      const selectedOption = select.options[index];
+      readoutEl.textContent = selectedOption ? selectedOption.textContent : "";
+    }
+
+    return { render };
+  }
+
+  const genreDial = createDial(genreSelect, document.getElementById("genre-dial"), document.getElementById("genre-readout"));
+  const eraDial = createDial(eraSelect, document.getElementById("era-dial"), document.getElementById("era-readout"));
+
   function renderStatus(status) {
     fillOptions(genreSelect, status.genre_options, status.genre);
     fillOptions(eraSelect, status.era_options, status.era);
+    genreDial.render();
+    eraDial.render();
     statusMessage.textContent = status.status_message;
     statusMessage.classList.toggle("playing", status.playing);
     stopBtn.disabled = !status.playing;
