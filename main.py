@@ -28,6 +28,10 @@ def check_dependencies():
         import yt_dlp  # noqa: F401
     except ImportError:
         problems.append("yt-dlp is not installed (pip install yt-dlp)")
+    try:
+        import rich  # noqa: F401
+    except ImportError:
+        problems.append("rich is not installed (pip install rich)")
     return problems
 
 
@@ -53,22 +57,17 @@ def main():
         print("[jukebox] Starting anyway -- set a working path from the web remote's Settings panel.")
 
     from controller import JukeboxController
+    import splash
     controller = JukeboxController()
 
     threading.Thread(target=_start_library_server, args=(controller,), daemon=True).start()
-    print(
-        f"Jukebox web remote starting on "
-        f"http://{config.LIBRARY_SERVER_HOST}:{config.LIBRARY_SERVER_PORT}/ "
-        "(LAN only, no auth)"
-    )
-    print(f"Video cache: {config.VIDEO_DIR}")
-    print("Ctrl+C to quit.\n")
+    splash.show_startup(config.LIBRARY_SERVER_HOST, config.LIBRARY_SERVER_PORT, config.VIDEO_DIR)
 
     try:
         threading.Event().wait()
     except KeyboardInterrupt:
         pass
-    print("\nGoodnight.")
+    splash.show_shutdown()
 
 
 if __name__ == "__main__":
