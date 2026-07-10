@@ -35,12 +35,19 @@ ACCENT_STYLE = "bold gold1"
 # columns is the standard Linux virtual console width.
 CONSOLE_WIDTH = 80
 
+# 5-wide x 7-tall grid per letter -- 5x7 is the classic minimum dot-matrix
+# size for legible Latin capitals (what real LED signage uses); the
+# original 5x5 version this replaced was too short to read letter shapes
+# like S/N/Y/C from a TV. Solid block glyphs (full block char) for contrast
+# rather than sparse '#', which loses definition at small console font sizes.
 BANNER = (
-    "##### ####  ### #   #   ##### #   # ##### #     #####\n"
-    "#     #   #  #  ##  #   #      # #  #     #     #    \n"
-    "##### ####   #  # # #   #       #   #     #     #### \n"
-    "    # #      #  #  ##   #       #   #     #     #    \n"
-    "##### #     ### #   #   #####   #   ##### ##### #####"
+    " ████ ████  ███ █   █    ████ █   █  ████ █     █████\n"
+    "█     █   █  █  ██  █   █     █   █ █     █     █    \n"
+    "█     █   █  █  █ █ █   █      █ █  █     █     █    \n"
+    " ███  ████   █  █ █ █   █       █   █     █     ████ \n"
+    "    █ █      █  █  ██   █       █   █     █     █    \n"
+    "    █ █      █  █   █   █       █   █     █     █    \n"
+    "████  █     ███ █   █    ████   █    ████ █████ █████"
 )
 
 TAGLINE = "~ your car-stereo jukebox ~"
@@ -70,9 +77,10 @@ def _consoles():
     except OSError as e:
         print(
             f"[splash] Could not open console {console_tty} for the idle screen ({e}). "
-            "Writing to it needs root, membership in the 'tty' group, or (eventually) "
-            "a systemd service with TTYPath= set -- the banner will still show up here "
-            "over SSH in the meantime.",
+            "Console devices are typically root-only until a session claims them -- run "
+            "as root for now, or (eventually) package this as a systemd service with "
+            "TTYPath= set, which grants ownership automatically. The banner will still "
+            "show up here over SSH in the meantime.",
             file=sys.stderr,
         )
         return
@@ -97,6 +105,7 @@ def show_startup(host: str, port: int, video_dir: str) -> None:
         padding=(1, 2),
     )
     for console in _consoles():
+        console.clear()
         console.print(panel)
 
 
