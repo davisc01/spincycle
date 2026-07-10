@@ -57,12 +57,21 @@ itself stays root-owned.
    export JUKEBOX_CACHE_ROOT=/media/pi/JUKEBOX/jukebox_cache
    ```
    (Add this line to `~/.bashrc` or a systemd service's `Environment=` so it's
-   always set. Default if unset is `/mnt/usbdrive/jukebox_cache`.) You can
-   also set/change this later from the web remote's Settings panel ("Cache
-   storage location") without touching the Pi directly -- it takes effect
-   immediately (no restart) and is remembered across restarts in
-   `config/settings.json`, which then takes priority over
-   `JUKEBOX_CACHE_ROOT` from then on.
+   always set.) If you'd rather not deal with environment variables at all,
+   skip this step -- `main.py` boots fine either way -- and instead set the
+   cache path from the web remote's Settings panel ("Cache storage
+   location") once it's running (step 6). That takes effect immediately (no
+   restart) and is remembered across restarts in `config/settings.json`,
+   which then takes priority over `JUKEBOX_CACHE_ROOT` from then on.
+
+   Without either one set, the app falls back to a `cache/` folder inside
+   the repo just so it always boots -- it's `.gitignore`'d and works
+   everywhere, but it lives on the same storage as the code (the SD card,
+   on a Pi), which defeats the point of using an external drive (see
+   "Target hardware" in `CLAUDE.md`). Don't leave it there for real parties;
+   a bad or unmounted path is never fatal (the web remote still comes up so
+   you can fix it), and the main page shows a warning banner whenever the
+   configured cache folder isn't actually usable.
 
 4. Add your videos to `config/library.csv`. It's a plain CSV with these
    columns (header row required):

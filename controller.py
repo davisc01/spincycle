@@ -21,7 +21,11 @@ from player import Player
 
 
 def _log_playback(line):
-    config.ensure_dirs()
+    # A bad CACHE_ROOT must never take down the play loop -- just skip the
+    # log line and keep playing; config.cache_root_problem() surfaces the
+    # underlying issue to the Settings panel instead.
+    if config.cache_root_problem():
+        return
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(config.PLAYBACK_LOG, "a", encoding="utf-8") as f:
         f.write(f"{timestamp}  {line}\n")
@@ -133,6 +137,7 @@ class JukeboxController:
                 "playing": self._playing,
                 "current_track": self._current_track,
                 "status_message": self._status_message,
+                "cache_root_problem": config.cache_root_problem(),
             }
 
     # -- playback loop -------------------------------------------------

@@ -118,6 +118,19 @@ button:hover {
   border-color: var(--danger);
 }
 
+#cache-warning {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: transparent;
+  font-size: 0.85rem;
+}
+
 aside {
   border-top: 1px solid var(--border);
 }

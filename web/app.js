@@ -18,6 +18,7 @@
   const cacheRootForm = document.getElementById("cache-root-form");
   const cacheRootInput = document.getElementById("cache-root-input");
   const cacheRootResult = document.getElementById("cache-root-result");
+  const cacheWarning = document.getElementById("cache-warning");
 
   let warmPollTimer = null;
 
@@ -44,6 +45,13 @@
     currentTrack.textContent = status.current_track ? `Now playing: ${status.current_track}` : "";
     stopBtn.disabled = !status.playing;
     skipBtn.disabled = !status.playing;
+
+    if (status.cache_root_problem) {
+      cacheWarning.textContent = `Cache folder isn't set up (${status.cache_root_problem}). Tap here to fix it in Settings.`;
+      cacheWarning.hidden = false;
+    } else {
+      cacheWarning.hidden = true;
+    }
   }
 
   async function fetchStatus() {
@@ -84,6 +92,12 @@
 
   // -- settings panel ------------------------------------------------
 
+  function openSettings() {
+    settingsPanel.hidden = false;
+    settingsToggle.setAttribute("aria-expanded", "true");
+    refreshSettings();
+  }
+
   settingsToggle.addEventListener("click", () => {
     const isOpen = !settingsPanel.hidden;
     settingsPanel.hidden = isOpen;
@@ -92,6 +106,8 @@
       refreshSettings();
     }
   });
+
+  cacheWarning.addEventListener("click", openSettings);
 
   async function refreshSettings() {
     await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshWarmStatus(), refreshLogs()]);
@@ -169,6 +185,7 @@
       cacheRootInput.value = data.cache_root;
       cacheRootResult.textContent = `Cache folder set to ${data.cache_root}`;
       cacheRootResult.style.color = "";
+      fetchStatus();
     }
   });
 

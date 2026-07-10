@@ -91,12 +91,15 @@ def parse_multipart_file(content_type, body):
 
 
 def _log_failure(label, url, err):
-    config.ensure_dirs()
+    print(f"[warm-cache] FAILED: {label} ({url}): {err}")
+    problem = config.cache_root_problem()
+    if problem:
+        print(f"[warm-cache] Can't write to {config.WARM_CACHE_LOG} either: {problem}")
+        return
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp}  {label}  {url}  ERROR: {err}\n"
     with open(config.WARM_CACHE_LOG, "a", encoding="utf-8") as f:
         f.write(line)
-    print(f"[warm-cache] FAILED: {label} ({url}): {err}")
 
 
 def _run_warm_cache():
@@ -177,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/logs/playback":
             self._send_json(200, _tail_lines(config.PLAYBACK_LOG))
         elif self.path == "/api/cache-root":
-            self._send_json(200, {"cache_root": config.CACHE_ROOT})
+            self._send_json(200, {"cache_root": config.CACHE_ROOT, "problem": config.cache_root_problem()})
         else:
             self._send_html(404, "<h1>Not found</h1>")
 
@@ -335,8 +338,15 @@ def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT,
     `controller`, if given, is a JukeboxController used to serve the
     genre/era/skip/stop API routes; without one those routes reply 503
     (library management routes -- upload, warm-cache, download -- work
-    either way)."""
-    config.ensure_dirs()
+    either way).
+
+    A bad CACHE_ROOT (missing drive, permission denied) is deliberately
+    *not* fatal here -- it's only fixable from this same web page's
+    Settings panel, so a broken cache path must never stop the page from
+    coming up."""
+    problem = config.cache_root_problem()
+    if problem:
+        print(f"[library_server] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
     server = ThreadingHTTPServer((host, port), Handler)
     server.controller = controller
     print(f"Serving on http://{host}:{port} (Ctrl+C to stop)")

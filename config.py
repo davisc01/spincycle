@@ -5,8 +5,14 @@ import json
 import os
 
 # --- Storage paths -----------------------------------------------------
-# Point this at your external USB drive's mount point.
-# e.g. if the drive auto-mounts at /media/pi/JUKEBOX, use that path.
+# Point this at your external USB drive's mount point, e.g. via
+# JUKEBOX_CACHE_ROOT=/media/pi/JUKEBOX/jukebox_cache, or set it later from
+# the web remote's Settings panel (see set_cache_root() below) -- either
+# way, don't leave it on the fallback default below for real use. That
+# default is just a repo-local folder (already .gitignore'd) chosen so the
+# app always boots even before you've mounted a drive or set a real path;
+# it lives on the same storage as the code (the SD card, on a Pi), which
+# CLAUDE.md's hardware notes explicitly say to avoid for actual video I/O.
 #
 # CACHE_ROOT (and the paths derived from it below) can also be changed at
 # runtime via set_cache_root() -- the web remote's settings panel does this.
@@ -16,7 +22,8 @@ import os
 # attribute lookups, never a cached local copy), so a runtime change takes
 # effect immediately everywhere without a restart.
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "config", "settings.json")
-_DEFAULT_CACHE_ROOT = os.environ.get("JUKEBOX_CACHE_ROOT", "/mnt/usbdrive/jukebox_cache")
+_FALLBACK_CACHE_ROOT = os.path.join(os.path.dirname(__file__), "cache")
+_DEFAULT_CACHE_ROOT = os.environ.get("JUKEBOX_CACHE_ROOT", _FALLBACK_CACHE_ROOT)
 
 
 def _load_settings():
@@ -107,3 +114,19 @@ LIBRARY_SERVER_PORT = 80
 
 def ensure_dirs():
     os.makedirs(VIDEO_DIR, exist_ok=True)
+
+
+def cache_root_problem():
+    """
+    Try to create CACHE_ROOT and return a human-readable problem
+    description if it's not usable (missing drive, permission denied,
+    etc.), or None if it's fine. Callers on the startup/hot path should
+    use this instead of a bare ensure_dirs() so a bad CACHE_ROOT never
+    crashes the app or blocks the web remote from coming up -- that's the
+    only way to fix it via the Settings panel instead of ssh.
+    """
+    try:
+        ensure_dirs()
+    except OSError as e:
+        return str(e)
+    return None
