@@ -2,7 +2,6 @@
   const genreSelect = document.getElementById("genre-select");
   const eraSelect = document.getElementById("era-select");
   const statusMessage = document.getElementById("status-message");
-  const currentTrack = document.getElementById("current-track");
   const skipBtn = document.getElementById("skip-btn");
   const stopBtn = document.getElementById("stop-btn");
 
@@ -42,7 +41,7 @@
     fillOptions(genreSelect, status.genre_options, status.genre);
     fillOptions(eraSelect, status.era_options, status.era);
     statusMessage.textContent = status.status_message;
-    currentTrack.textContent = status.current_track ? `Now playing: ${status.current_track}` : "";
+    statusMessage.classList.toggle("playing", status.playing);
     stopBtn.disabled = !status.playing;
     skipBtn.disabled = !status.playing;
 
