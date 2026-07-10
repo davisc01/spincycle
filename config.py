@@ -40,6 +40,12 @@ MPV_EXTRA_ARGS = [
     f"--audio-device={MPV_AUDIO_DEVICE}",
 ]
 
+# --- Library management web page (library_server.py) ---------------------
+# Port 80 is privileged on Linux -- see library_server.py's module
+# docstring for the setcap incantation needed to bind it without root.
+LIBRARY_SERVER_HOST = "0.0.0.0"
+LIBRARY_SERVER_PORT = 80
+
 
 def ensure_dirs():
     os.makedirs(VIDEO_DIR, exist_ok=True)

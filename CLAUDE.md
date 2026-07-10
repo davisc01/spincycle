@@ -104,8 +104,8 @@ largely unaffected.
 | `player.py` | Thin mpv subprocess wrapper. One subprocess per video; `skip()` just terminates it. |
 | `input_device.py` | Input abstraction. Currently `KeyboardInput` (w/s or arrows, Enter/Space, k, q) built for the old menu-tree model -- **will be replaced** per the interaction model above, not just extended. |
 | `menu.py` | Currently a discrete state machine: Genre list -> Era list -> shuffle -> play loop, reshuffling and looping forever once the set is exhausted until skip/quit. **Will be replaced** with the dual-dial live-tuning model above. |
-| `main.py` | Entry point; dependency check (mpv installed? yt-dlp importable?) before touching the menu. |
-| `library_server.py` | Standalone HTTP endpoint (no auth, LAN-only) for replacing `config/library.csv` from the network without ssh/scp, and for triggering/monitoring a `video_cache.warm_cache()` run with a persisted failure log (`config.WARM_CACHE_LOG`). Not imported by `main.py`. |
+| `main.py` | Entry point; dependency check (mpv installed? yt-dlp importable?) before touching the menu. Also starts `library_server.py`'s `run_server()` in a background daemon thread (via `_start_library_server()`), catching `OSError` so a bind failure (e.g. port 80 without the setcap grant) logs a warning instead of crashing the jukebox. |
+| `library_server.py` | HTTP endpoint (no auth, LAN-only) for replacing `config/library.csv` from the network without ssh/scp, and for triggering/monitoring a `video_cache.warm_cache()` run with a persisted failure log (`config.WARM_CACHE_LOG`). `run_server(host, port)` is the reusable entry point -- `main()` (CLI/argparse) and `main.py`'s background thread both call it. |
 
 ## Library format
 
@@ -133,11 +133,16 @@ python3 library.py
 # Pre-warm the video cache (walks entire library, downloads anything missing)
 python3 video_cache.py
 
-# Run the jukebox (keyboard-driven menu mockup, pre-radio-redesign)
+# Run the jukebox (keyboard-driven menu mockup, pre-radio-redesign) --
+# this also starts the library-management web server (below) in the
+# background automatically
 python3 main.py
 
-# Start the library-management web server (upload a new library.csv,
-# trigger/monitor cache warming) -- binds 0.0.0.0:8080 by default
+# Start just the library-management web server (upload a new library.csv,
+# trigger/monitor cache warming), without launching full playback -- binds
+# 0.0.0.0:80 by default, which needs root or cap_net_bind_service (see
+# library_server.py's module docstring and README.md's "Setup on the Pi"
+# section)
 python3 library_server.py
 
 # Syntax-check everything
