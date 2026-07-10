@@ -21,14 +21,13 @@ class MenuController:
 
     def run(self):
         while True:
-            genre = self._select_from_list(list(self.library.keys()), "Genre")
+            genre = self._select_from_list(library.genre_options(self.library), "Genre")
             if genre is None:
                 break  # quit the whole app
-            eras = self.library[genre]
-            era = self._select_from_list(list(eras.keys()), f"{genre} > Era")
+            era = self._select_from_list(library.era_options(self.library, genre), f"{genre} > Era")
             if era is None:
                 continue  # back to genre list
-            tracks = eras[era]
+            tracks = library.tracks_for(self.library, genre, era)
             if not tracks:
                 print(f"\nNo tracks yet in {genre} / {era} -- add some to config/library.csv!\n")
                 continue

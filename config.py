@@ -11,6 +11,7 @@ CACHE_ROOT = os.environ.get("JUKEBOX_CACHE_ROOT", "/mnt/usbdrive/jukebox_cache")
 VIDEO_DIR = os.path.join(CACHE_ROOT, "videos")
 INDEX_FILE = os.path.join(CACHE_ROOT, "index.json")       # url -> local path map
 ARCHIVE_FILE = os.path.join(CACHE_ROOT, "yt-dlp-archive.txt")  # yt-dlp's own "already downloaded" ledger
+WARM_CACHE_LOG = os.path.join(CACHE_ROOT, "warm_cache_failures.log")  # append-only log of failed downloads
 
 LIBRARY_FILE = os.path.join(os.path.dirname(__file__), "config", "library.csv")
 

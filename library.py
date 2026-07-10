@@ -11,6 +11,11 @@ import csv
 
 REQUIRED_COLUMNS = {"artist", "song", "genre", "era", "url"}
 
+# Wildcard picks, appended to the real genre/era lists -- picking either
+# (or both) plays across whatever dimension is left unconstrained.
+ANY_GENRE = "Anything"
+ANY_ERA = "Anytime"
+
 
 def load_library(csv_path):
     library = {}
@@ -47,6 +52,47 @@ def all_tracks(library):
         for track_list in eras.values():
             tracks.extend(track_list)
     return tracks
+
+
+def genre_options(library):
+    """Real genres plus the ANY_GENRE wildcard, for the genre picker."""
+    return list(library.keys()) + [ANY_GENRE]
+
+
+def era_options(library, genre):
+    """
+    Real eras plus the ANY_ERA wildcard, for the era picker.
+    If genre is ANY_GENRE, that's every era across the whole library
+    (first-seen order, deduped) rather than just one genre's eras.
+    """
+    if genre == ANY_GENRE:
+        eras = []
+        for eras_dict in library.values():
+            for era in eras_dict.keys():
+                if era not in eras:
+                    eras.append(era)
+        return eras + [ANY_ERA]
+    return list(library.get(genre, {}).keys()) + [ANY_ERA]
+
+
+def tracks_for(library, genre, era):
+    """
+    Tracks matching a genre/era pick, honoring ANY_GENRE/ANY_ERA wildcards
+    in either or both positions.
+    """
+    if genre == ANY_GENRE and era == ANY_ERA:
+        return all_tracks(library)
+    if genre == ANY_GENRE:
+        tracks = []
+        for eras_dict in library.values():
+            tracks.extend(eras_dict.get(era, []))
+        return tracks
+    if era == ANY_ERA:
+        tracks = []
+        for era_tracks in library.get(genre, {}).values():
+            tracks.extend(era_tracks)
+        return tracks
+    return library.get(genre, {}).get(era, [])
 
 
 if __name__ == "__main__":
