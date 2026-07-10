@@ -2,13 +2,16 @@
 """
 Music video jukebox - entry point.
 
-Run this directly to test the whole flow with a keyboard standing in for
-the rotary encoder + buttons. Once the hardware's wired up, only
-input_device.py needs a GPIO-based sibling to KeyboardInput.
+Starts a JukeboxController (genre/era selection, shuffle playback) and
+library_server.py's web remote in a background thread -- the browser-based
+UI (genre/era selectors, skip/stop, settings) is the primary interface
+until the physical rotary-encoder + LCD hardware lands. The old terminal
+keyboard mode (menu.py + input_device.py) still works standalone for dev
+use (`python3 menu.py`) but is no longer started here, to avoid two
+independent Player/mpv instances fighting over the one screen/speaker.
 
-Also starts library_server.py's web page (library.csv upload, cache-warm
-trigger) in a background thread -- see that file's module docstring for
-the setcap step needed to bind its default port (80) without root.
+See library_server.py's module docstring for the setcap step needed to
+bind its default port (80) without root.
 """
 import shutil
 import sys
@@ -28,12 +31,12 @@ def check_dependencies():
     return problems
 
 
-def _start_library_server():
+def _start_library_server(controller):
     import library_server
     try:
-        library_server.run_server()
+        library_server.run_server(controller=controller)
     except OSError as e:
-        print(f"[library_server] Could not start web management page: {e}")
+        print(f"[library_server] Could not start web remote: {e}")
 
 
 def main():
@@ -46,17 +49,22 @@ def main():
 
     config.ensure_dirs()
 
-    threading.Thread(target=_start_library_server, daemon=True).start()
+    from controller import JukeboxController
+    controller = JukeboxController()
+
+    threading.Thread(target=_start_library_server, args=(controller,), daemon=True).start()
     print(
-        f"Library management page starting on "
+        f"Jukebox web remote starting on "
         f"http://{config.LIBRARY_SERVER_HOST}:{config.LIBRARY_SERVER_PORT}/ "
         "(LAN only, no auth)"
     )
-
-    from menu import MenuController
     print(f"Video cache: {config.VIDEO_DIR}")
-    print("Starting jukebox. Ctrl+C to force-quit at any time.\n")
-    MenuController().run()
+    print("Ctrl+C to quit.\n")
+
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        pass
     print("\nGoodnight.")
 
 

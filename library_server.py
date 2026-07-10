@@ -1,9 +1,12 @@
 """
-Standalone HTTP server for managing config/library.csv without ssh/scp, and
-for triggering/monitoring a video_cache.warm_cache() run from the LAN.
+Standalone HTTP server serving the jukebox's web remote (web/index.html):
+genre/era selection, skip/stop, and a settings panel for managing
+config/library.csv and cache warming.
 
-Not imported by main.py -- run it manually (or as its own systemd service)
-only when you want to push a new library or pre-warm the cache:
+Not imported when menu.py's terminal keyboard mode is run standalone, but
+started automatically by main.py alongside a JukeboxController -- see that
+file. Also runnable standalone (without a controller) for library
+maintenance only:
 
     python3 library_server.py            # binds 0.0.0.0:80
     python3 library_server.py --port 9000
@@ -25,6 +28,7 @@ this port beyond your LAN.
 """
 import argparse
 import html
+import json
 import os
 import shutil
 import threading
@@ -37,6 +41,13 @@ import video_cache
 
 _warm_lock = threading.Lock()
 _warm_state = {"running": False, "current": 0, "total": 0, "label": ""}
+
+_WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
+_STATIC_FILES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/style.css": ("style.css", "text/css; charset=utf-8"),
+    "/app.js": ("app.js", "application/javascript; charset=utf-8"),
+}
 
 
 def parse_multipart_file(content_type, body):
@@ -111,78 +122,62 @@ def _run_warm_cache():
             _warm_state["running"] = False
 
 
-def _recent_failures(limit=20):
-    if not os.path.exists(config.WARM_CACHE_LOG):
+def _tail_lines(path, limit=50):
+    if not os.path.exists(path):
         return []
-    with open(config.WARM_CACHE_LOG, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         lines = [line.rstrip("\n") for line in f if line.strip()]
     return list(reversed(lines[-limit:]))
 
 
-def _render_index():
-    if os.path.exists(config.LIBRARY_FILE):
-        stat = os.stat(config.LIBRARY_FILE)
-        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        library_status = f"{stat.st_size} bytes, last modified {mtime}"
-    else:
-        library_status = "not found"
-
-    with _warm_lock:
-        state = dict(_warm_state)
-
-    if state["running"]:
-        warm_status = f"Running: {state['current']}/{state['total']} — {html.escape(state['label'])}"
-        refresh_tag = '<meta http-equiv="refresh" content="5">'
-    else:
-        warm_status = "Idle"
-        refresh_tag = ""
-
-    failures = _recent_failures()
-    if failures:
-        failures_html = "\n".join(f"<li>{html.escape(line)}</li>" for line in failures)
-    else:
-        failures_html = "<li>(none)</li>"
-
-    return f"""<!doctype html>
-<html>
-<head><title>Jukebox library manager</title>{refresh_tag}</head>
-<body>
-<h1>Jukebox library manager</h1>
-
-<h2>Current library.csv</h2>
-<p>{html.escape(library_status)}</p>
-<form method="POST" action="/upload" enctype="multipart/form-data">
-  <input type="file" name="csv" accept=".csv">
-  <button type="submit">Upload replacement</button>
-</form>
-
-<h2>Cache warming</h2>
-<p>Status: {warm_status}</p>
-<form method="POST" action="/warm-cache">
-  <button type="submit">Warm cache</button>
-</form>
-
-<h3>Recent failures (config.WARM_CACHE_LOG)</h3>
-<ul>
-{failures_html}
-</ul>
-</body>
-</html>
-"""
-
-
 class Handler(BaseHTTPRequestHandler):
+    @property
+    def controller(self):
+        return getattr(self.server, "controller", None)
+
     def _send_html(self, status, body):
-        encoded = body.encode("utf-8")
+        self._send_bytes(status, body.encode("utf-8"), "text/html; charset=utf-8")
+
+    def _send_json(self, status, obj):
+        self._send_bytes(status, json.dumps(obj).encode("utf-8"), "application/json")
+
+    def _send_bytes(self, status, encoded, content_type, extra_headers=None):
         self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(encoded)))
+        for key, value in (extra_headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _read_json_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            return {}
+        body = self.rfile.read(length)
+        return json.loads(body.decode("utf-8")) if body else {}
+
+    # -- routing ---------------------------------------------------------
+
     def do_GET(self):
-        if self.path == "/":
-            self._send_html(200, _render_index())
+        if self.path in _STATIC_FILES:
+            self._serve_static(self.path)
+        elif self.path == "/library.csv":
+            self._handle_download_csv()
+        elif self.path == "/api/status":
+            if self._require_controller():
+                self._send_json(200, self.controller.status())
+        elif self.path == "/api/library-status":
+            self._send_json(200, self._library_status())
+        elif self.path == "/api/cache-status":
+            with _warm_lock:
+                self._send_json(200, dict(_warm_state))
+        elif self.path == "/api/logs/cache":
+            self._send_json(200, _tail_lines(config.WARM_CACHE_LOG))
+        elif self.path == "/api/logs/playback":
+            self._send_json(200, _tail_lines(config.PLAYBACK_LOG))
+        elif self.path == "/api/cache-root":
+            self._send_json(200, {"cache_root": config.CACHE_ROOT})
         else:
             self._send_html(404, "<h1>Not found</h1>")
 
@@ -191,8 +186,99 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_upload()
         elif self.path == "/warm-cache":
             self._handle_warm_cache()
+        elif self.path == "/api/genre":
+            self._handle_select("genre")
+        elif self.path == "/api/era":
+            self._handle_select("era")
+        elif self.path == "/api/skip":
+            self._handle_transport(self.controller.skip if self.controller else None)
+        elif self.path == "/api/stop":
+            self._handle_transport(self.controller.stop if self.controller else None)
+        elif self.path == "/api/cache-root":
+            self._handle_set_cache_root()
         else:
             self._send_html(404, "<h1>Not found</h1>")
+
+    def _require_controller(self):
+        if self.controller is None:
+            self._send_json(503, {"error": "no playback controller running"})
+            return False
+        return True
+
+    def _handle_transport(self, action):
+        if not self._require_controller():
+            return
+        action()
+        self._send_json(200, self.controller.status())
+
+    # -- static files ------------------------------------------------------
+
+    def _serve_static(self, path):
+        filename, content_type = _STATIC_FILES[path]
+        file_path = os.path.join(_WEB_DIR, filename)
+        try:
+            with open(file_path, "rb") as f:
+                body = f.read()
+        except OSError:
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+        self._send_bytes(200, body, content_type)
+
+    def _library_status(self):
+        if not os.path.exists(config.LIBRARY_FILE):
+            return {"exists": False}
+        stat = os.stat(config.LIBRARY_FILE)
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        return {"exists": True, "size": stat.st_size, "mtime": mtime}
+
+    def _handle_download_csv(self):
+        if not os.path.exists(config.LIBRARY_FILE):
+            self._send_html(404, "<h1>library.csv not found</h1>")
+            return
+        with open(config.LIBRARY_FILE, "rb") as f:
+            body = f.read()
+        self._send_bytes(
+            200,
+            body,
+            "text/csv; charset=utf-8",
+            extra_headers={"Content-Disposition": 'attachment; filename="library.csv"'},
+        )
+
+    # -- playback selection ------------------------------------------------
+
+    def _handle_select(self, field):
+        if not self._require_controller():
+            return
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+        value = payload.get(field)
+        if field == "genre":
+            self.controller.set_genre(value)
+        else:
+            self.controller.set_era(value)
+        self._send_json(200, self.controller.status())
+
+    def _handle_set_cache_root(self):
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+        path = (payload.get("cache_root") or "").strip()
+        if not path:
+            self._send_json(400, {"error": "cache_root must not be empty"})
+            return
+        try:
+            config.set_cache_root(path)
+        except OSError as e:
+            self._send_json(400, {"error": f"Can't use that path: {e}"})
+            return
+        self._send_json(200, {"cache_root": config.CACHE_ROOT})
+
+    # -- library upload / cache warming -------------------------------
 
     def _handle_upload(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -208,25 +294,22 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-            self._send_html(
-                400,
-                f"<h1>Upload rejected</h1><p>{html.escape(str(e))}</p>"
-                '<p><a href="/">Back</a></p>',
-            )
+            self._send_html(400, f"Upload rejected: {html.escape(str(e))}")
             return
 
         if os.path.exists(config.LIBRARY_FILE):
             shutil.copy2(config.LIBRARY_FILE, config.LIBRARY_FILE + ".bak")
         os.replace(tmp_path, config.LIBRARY_FILE)
 
+        if self.controller is not None:
+            self.controller.reload_library()
+
         genres = len(lib)
         eras = sum(len(e) for e in lib.values())
         tracks = len(library.all_tracks(lib))
         self._send_html(
             200,
-            f"<h1>Upload accepted</h1>"
-            f"<p>{genres} genre(s), {eras} genre/era combination(s), {tracks} track(s).</p>"
-            '<p><a href="/">Back</a></p>',
+            f"Upload accepted: {genres} genre(s), {eras} genre/era combination(s), {tracks} track(s).",
         )
 
     def _handle_warm_cache(self):
@@ -243,13 +326,19 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[library_server] {self.address_string()} - {fmt % args}")
 
 
-def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT):
+def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT, controller=None):
     """Bind and serve forever. Raises OSError if the port can't be bound
     (e.g. permission denied on a privileged port, or already in use) --
     callers that don't want that to be fatal (main.py running this in a
-    background thread) should catch it themselves."""
+    background thread) should catch it themselves.
+
+    `controller`, if given, is a JukeboxController used to serve the
+    genre/era/skip/stop API routes; without one those routes reply 503
+    (library management routes -- upload, warm-cache, download -- work
+    either way)."""
     config.ensure_dirs()
     server = ThreadingHTTPServer((host, port), Handler)
+    server.controller = controller
     print(f"Serving on http://{host}:{port} (Ctrl+C to stop)")
     server.serve_forever()
 

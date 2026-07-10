@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jukebox</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Jukebox</h1>
+    <button id="settings-toggle" type="button" aria-expanded="false">Settings</button>
+  </header>
+
+  <main id="remote">
+    <div class="picker-row">
+      <label>
+        Genre
+        <select id="genre-select">
+          <option value="">-- pick a genre --</option>
+        </select>
+      </label>
+      <label>
+        Era
+        <select id="era-select">
+          <option value="">-- pick an era --</option>
+        </select>
+      </label>
+    </div>
+
+    <p id="status-message">Loading...</p>
+    <p id="current-track"></p>
+
+    <div class="transport-row">
+      <button id="skip-btn" type="button">Skip</button>
+      <button id="stop-btn" type="button">Stop</button>
+    </div>
+  </main>
+
+  <aside id="settings" hidden>
+    <h2>Settings</h2>
+
+    <section>
+      <h3>Cache storage location</h3>
+      <p>Local path where downloaded videos are cached (e.g. your external drive's mount point).</p>
+      <form id="cache-root-form">
+        <input type="text" id="cache-root-input" placeholder="/mnt/usbdrive/jukebox_cache" required>
+        <button type="submit">Save</button>
+      </form>
+      <p id="cache-root-result"></p>
+    </section>
+
+    <section>
+      <h3>Library (config/library.csv)</h3>
+      <p id="library-status"></p>
+      <a id="download-link" href="/library.csv" download="library.csv">Download current library.csv</a>
+      <form id="upload-form" method="POST" action="/upload" enctype="multipart/form-data">
+        <input type="file" name="csv" accept=".csv" required>
+        <button type="submit">Upload replacement</button>
+      </form>
+      <p id="upload-result"></p>
+    </section>
+
+    <section>
+      <h3>Cache warming</h3>
+      <p id="warm-status">Idle</p>
+      <button id="warm-cache-btn" type="button">Warm cache</button>
+    </section>
+
+    <section>
+      <h3>Cache log</h3>
+      <pre id="cache-log" class="log-pane"></pre>
+    </section>
+
+    <section>
+      <h3>Playback log</h3>
+      <pre id="playback-log" class="log-pane"></pre>
+    </section>
+  </aside>
+
+  <script src="/app.js"></script>
+</body>
+</html>
