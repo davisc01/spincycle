@@ -9,6 +9,7 @@ When the GPIO hardware arrives, write a GpioInput class with the same
 wait_for_event()/poll_event() interface (fed by encoder interrupt callbacks
 pushing onto a queue), and nothing in menu.py has to change.
 """
+import atexit
 import select
 import sys
 import termios
@@ -34,16 +35,23 @@ class KeyboardInput:
 
     def __init__(self):
         self._fd = sys.stdin.fileno()
+        self._old_settings = termios.tcgetattr(self._fd)
+        # cbreak (not raw) so Ctrl-C still raises SIGINT as a force-quit
+        # escape hatch. Set once for the process lifetime rather than
+        # toggling per-keystroke: select() on a canonical-mode fd only
+        # reports readiness after a full line (i.e. Enter) is buffered by
+        # the kernel, so poll_event()'s select() would never see a lone
+        # 'k'/'q' press while the tty was left in cooked mode between reads.
+        tty.setcbreak(self._fd)
+        atexit.register(self.close)
+
+    def close(self):
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
     def _read_key(self):
-        old_settings = termios.tcgetattr(self._fd)
-        try:
-            tty.setraw(self._fd)
-            ch = sys.stdin.read(1)
-            if ch == "\x1b":  # start of an arrow-key escape sequence
-                ch += sys.stdin.read(2)
-        finally:
-            termios.tcsetattr(self._fd, termios.TCSADRAIN, old_settings)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":  # start of an arrow-key escape sequence
+            ch += sys.stdin.read(2)
         return ch
 
     def _key_to_event(self, key):
