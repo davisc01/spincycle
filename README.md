@@ -146,15 +146,18 @@ itself stays root-owned.
    (`/dev/tty1` by default, see `config.CONSOLE_TTY`) so the idle screen
    looks like part of the device on the TV, not just in your SSH session
    -- mpv already renders straight to that display over DRM/KMS regardless
-   of how you launched the process, so the splash does the same. Writing
-   to `/dev/tty1` needs root or membership in the `tty` group; if you're
-   testing over SSH as a regular user and only see the splash there (with
-   the TV still showing the login prompt), either run as root, or grant
-   your user tty access once (`sudo usermod -aG tty $(whoami)`, then log
-   out/in) -- if it still can't open the console, `main.py` logs why on
-   stderr rather than failing to start. This resolves itself automatically
-   once the app is packaged as a systemd service with `TTYPath=/dev/tty1`
-   (not done yet -- see `CLAUDE.md`'s "Known gaps").
+   of how you launched the process, so the splash does the same. Current
+   Raspberry Pi OS ships `/dev/tty1` as `root`-only (`crw-------`, no
+   group-write bit) -- console access is granted dynamically per logged-in
+   session rather than via static group permissions, so adding your user
+   to the `tty` group won't help. If you're testing over SSH as a regular
+   user and only see the splash there (with the TV still showing the login
+   prompt), run as root for now (`sudo venv/bin/python3 main.py`) -- if it
+   still can't open the console, `main.py` logs why on stderr rather than
+   failing to start. This resolves itself properly once the app is
+   packaged as a systemd service with `TTYPath=/dev/tty1` (not done yet --
+   see `CLAUDE.md`'s "Known gaps"): systemd grants the service temporary
+   ownership of that device itself, no `sudo` needed at that point.
 
 ## Controls
 
