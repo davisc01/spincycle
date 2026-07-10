@@ -35,20 +35,16 @@ ACCENT_STYLE = "bold gold1"
 # columns is the standard Linux virtual console width.
 CONSOLE_WIDTH = 80
 
-# 5-wide x 7-tall grid per letter -- 5x7 is the classic minimum dot-matrix
-# size for legible Latin capitals (what real LED signage uses); the
-# original 5x5 version this replaced was too short to read letter shapes
-# like S/N/Y/C from a TV. Solid block glyphs (full block char) for contrast
-# rather than sparse '#', which loses definition at small console font sizes.
-BANNER = (
-    " ████ ████  ███ █   █    ████ █   █  ████ █     █████\n"
-    "█     █   █  █  ██  █   █     █   █ █     █     █    \n"
-    "█     █   █  █  █ █ █   █      █ █  █     █     █    \n"
-    " ███  ████   █  █ █ █   █       █   █     █     ████ \n"
-    "    █ █      █  █  ██   █       █   █     █     █    \n"
-    "    █ █      █  █   █   █       █   █     █     █    \n"
-    "████  █     ███ █   █    ████   █    ████ █████ █████"
-)
+# Deliberately NOT multi-row block-letter ASCII art -- tried that twice (5x5,
+# then 5x7 dot-matrix) and both came out illegible on the real console: Linux
+# virtual terminals put visible vertical gaps between text lines (normal line
+# spacing), so adjacent rows of a pixel font never touch and vertical strokes
+# read as disconnected blobs instead of continuous lines. That's a property
+# of how the console spaces lines, not something fixable by tweaking glyph
+# shapes. A single spaced-out, bold line of the terminal's own font glyphs
+# can't suffer that problem -- there's nothing that needs to visually merge
+# across rows -- so that's the retro-marquee effect used here instead.
+BANNER = "S P I N     C Y C L E"
 
 TAGLINE = "~ your car-stereo jukebox ~"
 
