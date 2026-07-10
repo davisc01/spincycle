@@ -60,7 +60,7 @@ itself stays root-owned.
    always set.) If you'd rather not deal with environment variables at all,
    skip this step -- `main.py` boots fine either way -- and instead set the
    cache path from the web remote's Settings panel ("Cache storage
-   location") once it's running (step 6). That takes effect immediately (no
+   location") once it's running (step 7). That takes effect immediately (no
    restart) and is remembered across restarts in `config/settings.json`,
    which then takes priority over `JUKEBOX_CACHE_ROOT` from then on.
 
@@ -73,7 +73,62 @@ itself stays root-owned.
    you can fix it), and the main page shows a warning banner whenever the
    configured cache folder isn't actually usable.
 
-4. Add your videos to `config/library.csv`. It's a plain CSV with these
+4. If your TV supports 4K, the Pi 4 will often auto-negotiate a 4K HDMI
+   mode -- but our cached videos are H.264 at modest source resolutions
+   (see "Why H.264, not VP9/AV1" below), and decoding/scaling them up to
+   drive a 4K output can make mpv fall behind and drift out of audio/video
+   sync. Force the Pi to output 720p instead by adding these lines to
+   `/boot/firmware/config.txt` (older Raspberry Pi OS: `/boot/config.txt`):
+   ```
+   hdmi_force_hotplug=1
+   hdmi_group=1
+   hdmi_mode=4
+   ```
+   `hdmi_mode=4` is 1280x720@60Hz in the CEA (`hdmi_group=1`) mode table --
+   the right table for a TV rather than a PC monitor.
+
+   These `config.txt` lines alone only cover the firmware-level boot splash,
+   though -- with the full `vc4-kms-v3d` KMS driver this project requires
+   (see `CLAUDE.md`'s "Target hardware"), the kernel's DRM driver does its
+   own EDID negotiation once Linux takes over and reverts to the TV's
+   preferred (usually highest) mode, ignoring `hdmi_mode`. That's the
+   "starts at 720p, then jumps back up" symptom -- the switch happens right
+   when the KMS driver loads, not at mpv start. To actually lock the
+   post-boot mode, also force it on the kernel command line in
+   `/boot/firmware/cmdline.txt` (older Raspberry Pi OS: `/boot/cmdline.txt`).
+   That file must stay a single line -- append (don't insert a newline):
+   ```
+   video=HDMI-A-1:1280x720@60D
+   ```
+   The `D` suffix forces that exact timing rather than treating it as a
+   fallback hint the driver can still override with EDID's preferred mode.
+   If the TV is on the Pi 4's other HDMI port (the one nearer the audio
+   jack, if you moved it) use `HDMI-A-2` instead. Check which connector
+   name is actually live first:
+   ```
+   for f in /sys/class/drm/card*-HDMI-*; do echo "$f: $(cat $f/status)"; done
+   ```
+   and match the `connected` one to `HDMI-A-1`/`HDMI-A-2` in the `video=`
+   argument. Reboot after editing. Confirm the active mode afterwards with
+   `dmesg | grep -i drm` or `modetest -c` (from `libdrm-tests`) -- don't
+   rely on `tvservice`, it's a legacy-firmware-driver tool and doesn't
+   reflect reality under `vc4-kms-v3d`.
+
+   Locking the console mode still isn't the whole story, though: mpv's own
+   DRM output (`--gpu-context=drm`, what it auto-selects with no desktop
+   session running) defaults `--drm-mode` to `preferred`, which re-reads
+   the TV's EDID and requests its highest-resolution mode the instant mpv
+   opens the display -- independent of and overriding the `video=` lock
+   above. That's why the TV can still jump back to 4K (and drift out of
+   sync) specifically when a track starts playing, even once the idle
+   console is confirmed to be 720p. `config.py`'s `DRM_CONNECTOR` and
+   `DRM_MODE` pin mpv to the same connector/mode as `cmdline.txt` so it
+   doesn't renegotiate -- update both if you used `HDMI-A-2` or a different
+   resolution above. Use `mpv --drm-connector=help` / `--drm-mode=help` on
+   the Pi to see the exact valid values for your hardware if `1280x720@60`
+   isn't accepted as-is.
+
+5. Add your videos to `config/library.csv`. It's a plain CSV with these
    columns (header row required):
    ```
    artist,song,genre,era,url
@@ -85,14 +140,14 @@ itself stays root-owned.
    tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s ships in the repo.
 
    Instead of editing the file directly on the Pi (scp/git pull), open the
-   web remote's Settings panel (see step 6) from any browser on your LAN at
+   web remote's Settings panel (see step 7) from any browser on your LAN at
    `http://<pi-ip>/` (or `http://raspberrypi.local/` -- Raspberry Pi OS
    runs Avahi/mDNS by default, so the `.local` hostname resolves on the LAN
    without knowing the Pi's IP) and download/upload `library.csv` from
    there. Uploads are validated before being accepted, so a malformed CSV
    never overwrites the live one. **No authentication** -- LAN-only, same
    trust level as ssh. The web server starts automatically in the
-   background whenever `main.py` runs (step 6); run `venv/bin/python3
+   background whenever `main.py` runs (step 7); run `venv/bin/python3
    library_server.py` directly if you want library upload/download and
    cache-warming without launching full playback (e.g. remote library
    maintenance between parties) -- the genre/era/skip/stop controls simply
@@ -116,7 +171,7 @@ itself stays root-owned.
    stock Raspberry Pi OS install -- it doesn't ship with `ufw` enabled by
    default.
 
-5. (Optional but recommended) Pre-warm the cache so party night doesn't
+6. (Optional but recommended) Pre-warm the cache so party night doesn't
    depend on your internet connection:
    ```
    venv/bin/python3 video_cache.py
@@ -124,15 +179,15 @@ itself stays root-owned.
    This walks the whole library and downloads anything not yet cached,
    printing progress as it goes. Safe to re-run any time you add new URLs --
    already-cached videos are skipped instantly. The web remote's Settings
-   panel (step 6) has a "Warm cache" button that does this remotely, with a
+   panel (step 7) has a "Warm cache" button that does this remotely, with a
    live progress line and a scrollable log of anything that failed to
    download.
 
-6. Run the jukebox:
+7. Run the jukebox:
    ```
    venv/bin/python3 main.py
    ```
-   This starts a `JukeboxController` plus the web remote from step 4 in the
+   This starts a `JukeboxController` plus the web remote from step 5 in the
    background -- same host/port, same setcap requirement. Open
    `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on your
    laptop or phone: pick a genre and an era and playback starts
@@ -165,7 +220,7 @@ itself stays root-owned.
 
 Until the rotary encoders and LCD are wired up, `main.py` starts a
 `JukeboxController` and drives it from the browser-based web remote
-(`http://<pi-ip>/`, see step 6 above): a genre `<select>`, an era
+(`http://<pi-ip>/`, see step 7 above): a genre `<select>`, an era
 `<select>`, and Skip/Stop buttons. Picking a genre and an era starts
 playback automatically -- no separate confirm step, since picking from a
 dropdown is already a deliberate action. Changing either selection
