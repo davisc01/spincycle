@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+
+# Local video cache / index (never commit cached videos or the cache index)
+cache/
+*.mp4
+*.mkv
+index.json
+yt-dlp-archive.txt

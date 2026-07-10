@@ -25,16 +25,28 @@ order -- see "Controls" below for what exists now vs. what's coming.
 
 ## Setup on the Pi (Raspberry Pi OS 64-bit)
 
+The app lives at `/opt/apps/jukebox`. `/opt/apps` is chown'd to your user
+(e.g. `pi`) so you can clone/pull and manage the venv without `sudo`; `/opt`
+itself stays root-owned.
+
 1. System packages:
    ```
    sudo apt update
-   sudo apt install mpv python3-pip
+   sudo apt install mpv python3-full
    ```
 
-2. Python dependencies:
+2. Get the code onto the Pi and create a virtual environment. Raspberry Pi
+   OS's system Python is externally managed (PEP 668) and refuses
+   `pip install` outside a venv, so don't reach for `--break-system-packages`
+   -- just use a venv like anywhere else:
    ```
-   pip3 install -r requirements.txt
+   git clone <repo-url> /opt/apps/jukebox
+   cd /opt/apps/jukebox
+   python3 -m venv venv
+   venv/bin/pip install -r requirements.txt
    ```
+   From here on, run everything via `venv/bin/python3` (or `source
+   venv/bin/activate` first).
 
 3. Plug in your external USB drive and note its mount point, e.g. `/media/pi/JUKEBOX`.
    Point the app at it:
@@ -59,7 +71,7 @@ order -- see "Controls" below for what exists now vs. what's coming.
 5. (Optional but recommended) Pre-warm the cache so party night doesn't
    depend on your internet connection:
    ```
-   python3 video_cache.py
+   venv/bin/python3 video_cache.py
    ```
    This walks the whole library and downloads anything not yet cached,
    printing progress as it goes. Safe to re-run any time you add new URLs --
@@ -67,7 +79,7 @@ order -- see "Controls" below for what exists now vs. what's coming.
 
 6. Run the jukebox:
    ```
-   python3 main.py
+   venv/bin/python3 main.py
    ```
 
 ## Controls
