@@ -47,7 +47,10 @@ def main():
             print(f"  - {p}")
         sys.exit(1)
 
-    config.ensure_dirs()
+    problem = config.cache_root_problem()
+    if problem:
+        print(f"[jukebox] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
+        print("[jukebox] Starting anyway -- set a working path from the web remote's Settings panel.")
 
     from controller import JukeboxController
     controller = JukeboxController()
