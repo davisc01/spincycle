@@ -25,7 +25,19 @@ FORMAT_SELECTOR = (
 
 # --- Playback ------------------------------------------------------------
 MPV_HWDEC = "v4l2m2m"   # hardware decode mode for Pi 4 (V4L2 M2M)
-MPV_EXTRA_ARGS = ["--fs", "--really-quiet", "--no-terminal"]
+# ALSA `hw:` fails on the Pi 4's vc4-hdmi devices ("Can't find appropriate
+# sample format" -- they don't support mpv's format/rate without conversion).
+# `plughw:` routes through ALSA's plug layer, which converts as needed.
+# CARD=vc4hdmi0 is the HDMI port nearest the USB-C power connector; use
+# vc4hdmi1 (port nearest the audio jack) if audio is plugged into that one.
+MPV_AUDIO_DEVICE = "alsa/plughw:CARD=vc4hdmi0,DEV=0"
+MPV_EXTRA_ARGS = [
+    "--fs",
+    "--really-quiet",
+    "--no-terminal",
+    "--ao=alsa",
+    f"--audio-device={MPV_AUDIO_DEVICE}",
+]
 
 
 def ensure_dirs():
