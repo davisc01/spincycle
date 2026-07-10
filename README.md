@@ -70,12 +70,34 @@ itself stays root-owned.
    warning rather than breaking the app. A starter library of 18 well-known
    tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s ships in the repo.
 
-   Instead of editing the file directly on the Pi (scp/git pull), you can
-   run `venv/bin/python3 library_server.py` and upload a replacement
-   `library.csv` from any browser on your LAN at `http://<pi-ip>:8080`. It
-   validates the file before accepting it, so a malformed CSV never
-   overwrites the live one. **No authentication** -- LAN-only, same trust
-   level as ssh.
+   Instead of editing the file directly on the Pi (scp/git pull), upload a
+   replacement `library.csv` from any browser on your LAN at
+   `http://<pi-ip>/` (or `http://raspberrypi.local/` -- Raspberry Pi OS
+   runs Avahi/mDNS by default, so the `.local` hostname resolves on the LAN
+   without knowing the Pi's IP). It validates the file before accepting
+   it, so a malformed CSV never overwrites the live one. **No
+   authentication** -- LAN-only, same trust level as ssh. This page starts
+   automatically in the background whenever `main.py` runs (step 6); run
+   `venv/bin/python3 library_server.py` directly if you want it without
+   launching full playback (e.g. remote library maintenance between
+   parties).
+
+   It binds port 80 by default so you don't need `:8080` in the URL, but
+   port 80 is privileged on Linux -- binding it will fail with "Permission
+   denied" unless you either run as root (not recommended here, since the
+   server accepts file uploads and has no auth) or grant the interpreter
+   permission to bind low ports once:
+   ```
+   sudo setcap 'cap_net_bind_service=+ep' $(readlink -f venv/bin/python3)
+   ```
+   Re-run that command any time you rebuild the venv (a new `python3`
+   binary needs the capability reapplied). This applies whether you run
+   `library_server.py` standalone or via `main.py` -- both bind the same
+   port with the same interpreter. If the capability isn't granted,
+   `main.py` still runs the jukebox fine; it just logs that the web page
+   couldn't start and carries on. No firewall changes are needed on a
+   stock Raspberry Pi OS install -- it doesn't ship with `ufw` enabled by
+   default.
 
 5. (Optional but recommended) Pre-warm the cache so party night doesn't
    depend on your internet connection:
@@ -92,6 +114,8 @@ itself stays root-owned.
    ```
    venv/bin/python3 main.py
    ```
+   This also starts the library-management web page from step 4 in the
+   background -- same host/port, same setcap requirement.
 
 ## Controls
 
@@ -150,16 +174,19 @@ automatically once you stop turning.
   standalone to sanity-check the file (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
-- `library_server.py` - standalone, LAN-only web page for uploading a
-  replacement `library.csv` and for triggering/monitoring a cache-warm run,
-  without needing ssh. Not used by `main.py`; run it separately.
+- `library_server.py` - LAN-only web page for uploading a replacement
+  `library.csv` and for triggering/monitoring a cache-warm run, without
+  needing ssh. `main.py` starts it automatically in a background thread;
+  it's also runnable standalone (`python3 library_server.py`) if you want
+  the page without launching full playback.
 - `player.py` - mpv subprocess wrapper (play / skip).
 - `input_device.py` - input abstraction. `KeyboardInput` today, built for
   the discrete menu model above. Will be replaced (not just extended) by a
   GPIO-based input source once hardware lands -- see below.
 - `menu.py` - the current discrete state machine (Genre -> Era -> shuffled
   playback). Will be replaced by the live dual-dial model above.
-- `main.py` - entry point, dependency check.
+- `main.py` - entry point, dependency check, starts `library_server.py` in
+  the background before entering the menu loop.
 
 ## Moving to the rotary encoders and LCD
 

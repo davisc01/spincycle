@@ -5,8 +5,19 @@ for triggering/monitoring a video_cache.warm_cache() run from the LAN.
 Not imported by main.py -- run it manually (or as its own systemd service)
 only when you want to push a new library or pre-warm the cache:
 
-    python3 library_server.py            # binds 0.0.0.0:8080
+    python3 library_server.py            # binds 0.0.0.0:80
     python3 library_server.py --port 9000
+
+Port 80 is privileged on Linux -- binding it needs either root or the
+cap_net_bind_service capability. Don't run this whole process as root
+(see the security note below); instead grant the capability to the
+interpreter once:
+
+    sudo setcap 'cap_net_bind_service=+ep' $(readlink -f venv/bin/python3)
+
+(Re-run that after rebuilding the venv -- a new python3 binary means the
+capability grant needs reapplying.) See README.md's "Setup on the Pi"
+section for the full explanation.
 
 SECURITY NOTE: there is no authentication. This is meant for trusted
 home-LAN use only -- the same trust model as ssh/scp today. Don't expose
@@ -232,17 +243,25 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[library_server] {self.address_string()} - {fmt % args}")
 
 
+def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT):
+    """Bind and serve forever. Raises OSError if the port can't be bound
+    (e.g. permission denied on a privileged port, or already in use) --
+    callers that don't want that to be fatal (main.py running this in a
+    background thread) should catch it themselves."""
+    config.ensure_dirs()
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"Serving on http://{host}:{port} (Ctrl+C to stop)")
+    server.serve_forever()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--host", default=config.LIBRARY_SERVER_HOST)
+    parser.add_argument("--port", type=int, default=config.LIBRARY_SERVER_PORT)
     args = parser.parse_args()
 
-    config.ensure_dirs()
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Serving on http://{args.host}:{args.port} (Ctrl+C to stop)")
     try:
-        server.serve_forever()
+        run_server(args.host, args.port)
     except KeyboardInterrupt:
         pass
 

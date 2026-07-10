@@ -5,9 +5,14 @@ Music video jukebox - entry point.
 Run this directly to test the whole flow with a keyboard standing in for
 the rotary encoder + buttons. Once the hardware's wired up, only
 input_device.py needs a GPIO-based sibling to KeyboardInput.
+
+Also starts library_server.py's web page (library.csv upload, cache-warm
+trigger) in a background thread -- see that file's module docstring for
+the setcap step needed to bind its default port (80) without root.
 """
 import shutil
 import sys
+import threading
 
 import config
 
@@ -23,6 +28,14 @@ def check_dependencies():
     return problems
 
 
+def _start_library_server():
+    import library_server
+    try:
+        library_server.run_server()
+    except OSError as e:
+        print(f"[library_server] Could not start web management page: {e}")
+
+
 def main():
     problems = check_dependencies()
     if problems:
@@ -32,6 +45,13 @@ def main():
         sys.exit(1)
 
     config.ensure_dirs()
+
+    threading.Thread(target=_start_library_server, daemon=True).start()
+    print(
+        f"Library management page starting on "
+        f"http://{config.LIBRARY_SERVER_HOST}:{config.LIBRARY_SERVER_PORT}/ "
+        "(LAN only, no auth)"
+    )
 
     from menu import MenuController
     print(f"Video cache: {config.VIDEO_DIR}")
