@@ -80,6 +80,11 @@ This is a **radio-tuner** model, not a menu tree with confirm clicks:
    escape hatch, same effect as turning a dial but without changing the
    selection).
 
+Each dial's position list includes the `library.ANY_GENRE`/`library.ANY_ERA`
+wildcard as one extra detent past the real values (e.g. genre dial:
+Rock -> Pop -> Hip-Hop -> Anything -> back to Rock) -- it's a normal stop on
+the dial, not a special gesture.
+
 This is a bigger change than swapping `KeyboardInput` for a `GpioInput`
 with the same interface. The current `Event` model (`NEXT`/`PREV`/
 `SELECT`/`SKIP`/`QUIT`) was built for a discrete "browse a list, press to
@@ -94,12 +99,13 @@ largely unaffected.
 | File | Responsibility |
 |---|---|
 | `config.py` | Paths, yt-dlp format selector, mpv args. Start here for any environment-specific change. |
-| `library.py` | Parses `config/library.csv` into `{genre: {era: [track_dict]}}`. Track dicts have `artist`/`song`/`url`. |
+| `library.py` | Parses `config/library.csv` into `{genre: {era: [track_dict]}}`. Track dicts have `artist`/`song`/`url`. Also exposes `genre_options()`/`era_options()`/`tracks_for()`, which layer the `ANY_GENRE`/`ANY_ERA` ("Anything"/"Anytime") wildcard picks on top of the raw structure -- `menu.py` (and eventually the dial-driven picker) should go through these rather than indexing the dict directly. |
 | `video_cache.py` | Lazy caching: `ensure_cached(url)` returns a local path, downloading via yt-dlp only if not already indexed. `warm_cache()` walks the whole library (used by the standalone `python3 video_cache.py` pre-warm run). Index is a JSON file (`url -> local path`), written atomically. |
 | `player.py` | Thin mpv subprocess wrapper. One subprocess per video; `skip()` just terminates it. |
 | `input_device.py` | Input abstraction. Currently `KeyboardInput` (w/s or arrows, Enter/Space, k, q) built for the old menu-tree model -- **will be replaced** per the interaction model above, not just extended. |
 | `menu.py` | Currently a discrete state machine: Genre list -> Era list -> shuffle -> play loop. **Will be replaced** with the dual-dial live-tuning model above. |
 | `main.py` | Entry point; dependency check (mpv installed? yt-dlp importable?) before touching the menu. |
+| `library_server.py` | Standalone HTTP endpoint (no auth, LAN-only) for replacing `config/library.csv` from the network without ssh/scp, and for triggering/monitoring a `video_cache.warm_cache()` run with a persisted failure log (`config.WARM_CACHE_LOG`). Not imported by `main.py`. |
 
 ## Library format
 
@@ -109,6 +115,14 @@ warning rather than raising -- keep that behavior, a malformed row
 shouldn't take down the whole app. A missing *column* (not row) should
 still raise `ValueError` from `library.load_library()` -- that's a real
 config error, not a data quality issue.
+
+Alongside the real genre/era values parsed from the CSV, the picker always
+offers a wildcard: `library.ANY_GENRE` ("Anything") and `library.ANY_ERA`
+("Anytime"). Picking one relaxes that dimension; picking both plays from
+the whole library. This is a UI-layer concept only -- it's never a value
+that appears in `library.csv` itself, and `library.tracks_for(library,
+genre, era)` is what resolves a genre/era pick (wildcard or not) into the
+matching track list.
 
 ## Commands
 
@@ -122,8 +136,12 @@ python3 video_cache.py
 # Run the jukebox (keyboard-driven menu mockup, pre-radio-redesign)
 python3 main.py
 
+# Start the library-management web server (upload a new library.csv,
+# trigger/monitor cache warming) -- binds 0.0.0.0:8080 by default
+python3 library_server.py
+
 # Syntax-check everything
-python3 -m py_compile config.py library.py video_cache.py player.py input_device.py menu.py main.py
+python3 -m py_compile config.py library.py video_cache.py player.py input_device.py menu.py main.py library_server.py
 ```
 
 There's no test suite yet -- `library.py`'s `__main__` block and manual runs

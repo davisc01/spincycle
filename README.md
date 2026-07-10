@@ -68,6 +68,13 @@ itself stays root-owned.
    warning rather than breaking the app. A starter library of 18 well-known
    tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s ships in the repo.
 
+   Instead of editing the file directly on the Pi (scp/git pull), you can
+   run `venv/bin/python3 library_server.py` and upload a replacement
+   `library.csv` from any browser on your LAN at `http://<pi-ip>:8080`. It
+   validates the file before accepting it, so a malformed CSV never
+   overwrites the live one. **No authentication** -- LAN-only, same trust
+   level as ssh.
+
 5. (Optional but recommended) Pre-warm the cache so party night doesn't
    depend on your internet connection:
    ```
@@ -75,7 +82,9 @@ itself stays root-owned.
    ```
    This walks the whole library and downloads anything not yet cached,
    printing progress as it goes. Safe to re-run any time you add new URLs --
-   already-cached videos are skipped instantly.
+   already-cached videos are skipped instantly. The same page from step 4
+   (`library_server.py`) has a "Warm cache" button that does this remotely,
+   with a live progress line and a log of anything that failed to download.
 
 6. Run the jukebox:
    ```
@@ -97,6 +106,12 @@ keyboard-driven stand-in with a browse-a-list-then-confirm menu:
 | k              | Press the skip button (next track) |
 | q              | Back out of a menu / stop playback and return to menu |
 
+Both the genre and era lists have one extra entry past the real values:
+**"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
+half of the match -- e.g. genre `Rock` + era `Anytime` plays all Rock
+regardless of era; `Anything` + a specific era plays that era across every
+genre; `Anything` + `Anytime` shuffles the entire library.
+
 ### Coming: radio-tuner model (real hardware)
 
 Once the dials and LCD are installed, the interaction changes from a menu
@@ -113,6 +128,9 @@ tree to something closer to tuning an old car radio:
   video and drops back into live browsing, like re-tuning a station.
 - **Genre dial's push-button** = skip the current track.
 - **Era dial's push-button** = stop playback and return to browsing.
+- Each dial has one extra detent past its real values -- "Anything" on the
+  genre dial, "Anytime" on the era dial -- for playing across whichever
+  half you leave wide open (see "Anything"/"Anytime" above).
 
 This means the dials' built-in push-buttons are *not* used to confirm a
 genre/era pick -- only for skip and stop, since selection happens
@@ -125,10 +143,14 @@ automatically once you stop turning.
   era, url. Easiest file to hand-edit; open it in any text editor or
   spreadsheet app.
 - `library.py` - loads `library.csv` into the genre -> era -> tracks
-  structure the menu uses. Also runnable standalone to sanity-check the
-  file (`python3 library.py`).
+  structure the menu uses, and resolves a genre/era pick (including the
+  "Anything"/"Anytime" wildcards) into a track list. Also runnable
+  standalone to sanity-check the file (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
+- `library_server.py` - standalone, LAN-only web page for uploading a
+  replacement `library.csv` and for triggering/monitoring a cache-warm run,
+  without needing ssh. Not used by `main.py`; run it separately.
 - `player.py` - mpv subprocess wrapper (play / skip).
 - `input_device.py` - input abstraction. `KeyboardInput` today, built for
   the discrete menu model above. Will be replaced (not just extended) by a
