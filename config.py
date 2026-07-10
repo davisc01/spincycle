@@ -97,12 +97,28 @@ MPV_HWDEC = "v4l2m2m"   # hardware decode mode for Pi 4 (V4L2 M2M)
 # CARD=vc4hdmi0 is the HDMI port nearest the USB-C power connector; use
 # vc4hdmi1 (port nearest the audio jack) if audio is plugged into that one.
 MPV_AUDIO_DEVICE = "alsa/plughw:CARD=vc4hdmi0,DEV=0"
+# mpv's DRM output (--gpu-context=drm, what it auto-selects with no desktop
+# running) defaults --drm-mode to "preferred" -- it re-reads the TV's EDID
+# and requests its highest-resolution mode the instant mpv opens the
+# display, regardless of whatever /boot/firmware/cmdline.txt's video=
+# argument locked at boot (see README's HDMI/resolution setup step). On a
+# 4K-capable TV that snaps the display back up to 4K right as playback
+# starts, and decoding/scaling our modest-resolution H.264 source up to
+# 4K is what causes audio/video drift. Pin the same connector/mode locked
+# at boot so mpv doesn't renegotiate. Update DRM_CONNECTOR/DRM_MODE below
+# to match if you changed the video= value in cmdline.txt (find valid
+# values on the Pi with `mpv --drm-connector=help` / `--drm-mode=help`).
+DRM_CONNECTOR = "HDMI-A-1"
+DRM_MODE = "1280x720@60"
 MPV_EXTRA_ARGS = [
     "--fs",
     "--really-quiet",
     "--no-terminal",
     "--ao=alsa",
     f"--audio-device={MPV_AUDIO_DEVICE}",
+    "--gpu-context=drm",
+    f"--drm-connector={DRM_CONNECTOR}",
+    f"--drm-mode={DRM_MODE}",
 ]
 
 # --- Console display ------------------------------------------------------
