@@ -21,3 +21,6 @@ cache/
 *.mkv
 index.json
 yt-dlp-archive.txt
+
+# Per-device runtime settings (e.g. the cache root path set via the web UI)
+config/settings.json

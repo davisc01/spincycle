@@ -11,8 +11,9 @@ sourced from YouTube via yt-dlp and lazily cached to local storage so
 playback never depends on the network once a video's been played once.
 
 **Status:** software (caching, playback, library) works today via a
-keyboard-driven mockup. Physical hardware (LCD, rotary encoders) is on
-order -- see "Controls" below for what exists now vs. what's coming.
+browser-based web remote (genre/era selectors, skip/stop, settings).
+Physical hardware (LCD, rotary encoders) is on order -- see "Controls"
+below for what exists now vs. what's coming.
 
 ## Hardware
 
@@ -56,8 +57,12 @@ itself stays root-owned.
    export JUKEBOX_CACHE_ROOT=/media/pi/JUKEBOX/jukebox_cache
    ```
    (Add this line to `~/.bashrc` or a systemd service's `Environment=` so it's
-   always set. Default if unset is `/mnt/usbdrive/jukebox_cache` -- edit
-   `config.py` directly if you'd rather hardcode your path.)
+   always set. Default if unset is `/mnt/usbdrive/jukebox_cache`.) You can
+   also set/change this later from the web remote's Settings panel ("Cache
+   storage location") without touching the Pi directly -- it takes effect
+   immediately (no restart) and is remembered across restarts in
+   `config/settings.json`, which then takes priority over
+   `JUKEBOX_CACHE_ROOT` from then on.
 
 4. Add your videos to `config/library.csv`. It's a plain CSV with these
    columns (header row required):
@@ -70,17 +75,20 @@ itself stays root-owned.
    warning rather than breaking the app. A starter library of 18 well-known
    tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s ships in the repo.
 
-   Instead of editing the file directly on the Pi (scp/git pull), upload a
-   replacement `library.csv` from any browser on your LAN at
+   Instead of editing the file directly on the Pi (scp/git pull), open the
+   web remote's Settings panel (see step 6) from any browser on your LAN at
    `http://<pi-ip>/` (or `http://raspberrypi.local/` -- Raspberry Pi OS
    runs Avahi/mDNS by default, so the `.local` hostname resolves on the LAN
-   without knowing the Pi's IP). It validates the file before accepting
-   it, so a malformed CSV never overwrites the live one. **No
-   authentication** -- LAN-only, same trust level as ssh. This page starts
-   automatically in the background whenever `main.py` runs (step 6); run
-   `venv/bin/python3 library_server.py` directly if you want it without
-   launching full playback (e.g. remote library maintenance between
-   parties).
+   without knowing the Pi's IP) and download/upload `library.csv` from
+   there. Uploads are validated before being accepted, so a malformed CSV
+   never overwrites the live one. **No authentication** -- LAN-only, same
+   trust level as ssh. The web server starts automatically in the
+   background whenever `main.py` runs (step 6); run `venv/bin/python3
+   library_server.py` directly if you want library upload/download and
+   cache-warming without launching full playback (e.g. remote library
+   maintenance between parties) -- the genre/era/skip/stop controls simply
+   report unavailable (503) when run this way, since there's no
+   `JukeboxController` behind them.
 
    It binds port 80 by default so you don't need `:8080` in the URL, but
    port 80 is privileged on Linux -- binding it will fail with "Permission
@@ -106,23 +114,42 @@ itself stays root-owned.
    ```
    This walks the whole library and downloads anything not yet cached,
    printing progress as it goes. Safe to re-run any time you add new URLs --
-   already-cached videos are skipped instantly. The same page from step 4
-   (`library_server.py`) has a "Warm cache" button that does this remotely,
-   with a live progress line and a log of anything that failed to download.
+   already-cached videos are skipped instantly. The web remote's Settings
+   panel (step 6) has a "Warm cache" button that does this remotely, with a
+   live progress line and a scrollable log of anything that failed to
+   download.
 
 6. Run the jukebox:
    ```
    venv/bin/python3 main.py
    ```
-   This also starts the library-management web page from step 4 in the
-   background -- same host/port, same setcap requirement.
+   This starts a `JukeboxController` plus the web remote from step 4 in the
+   background -- same host/port, same setcap requirement. Open
+   `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on your
+   laptop or phone: pick a genre and an era and playback starts
+   automatically (re-picking either one re-tunes: stops the current video
+   and starts the new combination), Skip/Stop control the current track,
+   and the Settings button opens the library upload/download, cache-warm,
+   and log panels from steps 4-5.
 
 ## Controls
 
-### Today: keyboard mockup (discrete menu)
+### Today: web remote
 
-Until the rotary encoders and LCD are wired up, `main.py` runs a
-keyboard-driven stand-in with a browse-a-list-then-confirm menu:
+Until the rotary encoders and LCD are wired up, `main.py` starts a
+`JukeboxController` and drives it from the browser-based web remote
+(`http://<pi-ip>/`, see step 6 above): a genre `<select>`, an era
+`<select>`, and Skip/Stop buttons. Picking a genre and an era starts
+playback automatically -- no separate confirm step, since picking from a
+dropdown is already a deliberate action. Changing either selection
+mid-playback re-tunes: stops the current video and starts the new
+combination. Skip moves to the next track without changing the selection;
+Stop halts playback and returns to browsing. A Settings button opens the
+library upload/download, cache-warm trigger, and cache/playback log panels.
+
+There's also a terminal keyboard mockup (`menu.py` + `input_device.py`)
+left over from before the web remote existed, with a browse-a-list-then-
+confirm menu:
 
 | Key            | Action                        |
 |----------------|--------------------------------|
@@ -131,6 +158,11 @@ keyboard-driven stand-in with a browse-a-list-then-confirm menu:
 | Enter / Space  | Push the selector button (confirm) |
 | k              | Press the skip button (next track) |
 | q              | Back out of a menu / stop playback and return to menu |
+
+It's dev/testing-only now -- run it directly with `venv/bin/python3
+menu.py`; `main.py` no longer starts it, since running it alongside the web
+remote would mean two independent mpv processes fighting over the same
+screen and speaker.
 
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
@@ -169,24 +201,37 @@ automatically once you stop turning.
   era, url. Easiest file to hand-edit; open it in any text editor or
   spreadsheet app.
 - `library.py` - loads `library.csv` into the genre -> era -> tracks
-  structure the menu uses, and resolves a genre/era pick (including the
+  structure, and resolves a genre/era pick (including the
   "Anything"/"Anytime" wildcards) into a track list. Also runnable
   standalone to sanity-check the file (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
-- `library_server.py` - LAN-only web page for uploading a replacement
-  `library.csv` and for triggering/monitoring a cache-warm run, without
-  needing ssh. `main.py` starts it automatically in a background thread;
-  it's also runnable standalone (`python3 library_server.py`) if you want
-  the page without launching full playback.
+- `controller.py` - `JukeboxController`, the live playback engine behind
+  the web remote: tracks the current genre/era/track, and shuffles/plays/
+  skips/stops on a background thread as selections change. Logs each
+  track play/skip/error to `config.PLAYBACK_LOG`. Intentionally decoupled
+  from `input_device.py`'s `Event` model so a future GPIO dial input could
+  drive it too.
+- `library_server.py` - LAN-only web server for the whole web remote:
+  serves `web/index.html`/`style.css`/`app.js`, a JSON API
+  (`/api/status`, `/api/genre`, `/api/era`, `/api/skip`, `/api/stop`,
+  `/api/logs/...`) backed by a `JukeboxController`, and the
+  library-management routes (`/upload`, `/library.csv` download,
+  `/warm-cache`). `main.py` starts it automatically in a background
+  thread; it's also runnable standalone (`python3 library_server.py`) for
+  library maintenance without full playback (the controller-backed routes
+  503 in that mode).
+- `web/` - the browser UI: `index.html`, `style.css`, `app.js` (vanilla
+  JS, no build step, polls `/api/status`).
 - `player.py` - mpv subprocess wrapper (play / skip).
-- `input_device.py` - input abstraction. `KeyboardInput` today, built for
-  the discrete menu model above. Will be replaced (not just extended) by a
-  GPIO-based input source once hardware lands -- see below.
-- `menu.py` - the current discrete state machine (Genre -> Era -> shuffled
-  playback). Will be replaced by the live dual-dial model above.
-- `main.py` - entry point, dependency check, starts `library_server.py` in
-  the background before entering the menu loop.
+- `input_device.py` - input abstraction. `KeyboardInput`, built for the
+  discrete menu model in `menu.py`. Not used by `main.py` -- see below.
+- `menu.py` - dev/testing-only terminal keyboard mockup (Genre -> Era ->
+  shuffled playback), superseded by the web remote. Run it directly
+  (`python3 menu.py`) if you want it; `main.py` doesn't start it.
+- `main.py` - entry point, dependency check, creates the
+  `JukeboxController` and starts `library_server.py` in the background,
+  then just waits (the web remote owns all interactivity).
 
 ## Moving to the rotary encoders and LCD
 
