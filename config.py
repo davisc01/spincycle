@@ -105,6 +105,17 @@ MPV_EXTRA_ARGS = [
     f"--audio-device={MPV_AUDIO_DEVICE}",
 ]
 
+# --- Console display ------------------------------------------------------
+# The physical screen the jukebox sits in front of (a TV over HDMI, showing
+# a Linux virtual console when nothing's playing). mpv already renders
+# straight to this display via DRM/KMS no matter which session launched the
+# process; splash.py opens this device explicitly so the idle-screen banner
+# does too, rather than just going to whatever stdout main.py happened to
+# inherit (e.g. an SSH session's pty, which isn't what's on the TV).
+# Override via JUKEBOX_CONSOLE_TTY if the Pi's console isn't tty1 for some
+# reason. Requires write access to the device -- see splash.py.
+CONSOLE_TTY = os.environ.get("JUKEBOX_CONSOLE_TTY", "/dev/tty1")
+
 # --- Library management web page (library_server.py) ---------------------
 # Port 80 is privileged on Linux -- see library_server.py's module
 # docstring for the setcap incantation needed to bind it without root.
