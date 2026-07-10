@@ -141,6 +141,21 @@ itself stays root-owned.
    and the Settings button opens the library upload/download, cache-warm,
    and log panels from steps 4-5.
 
+   `main.py` also prints a retro "Spin Cycle" splash to whatever launched
+   it, and tries to write it directly to the physical console
+   (`/dev/tty1` by default, see `config.CONSOLE_TTY`) so the idle screen
+   looks like part of the device on the TV, not just in your SSH session
+   -- mpv already renders straight to that display over DRM/KMS regardless
+   of how you launched the process, so the splash does the same. Writing
+   to `/dev/tty1` needs root or membership in the `tty` group; if you're
+   testing over SSH as a regular user and only see the splash there (with
+   the TV still showing the login prompt), either run as root, or grant
+   your user tty access once (`sudo usermod -aG tty $(whoami)`, then log
+   out/in) -- if it still can't open the console, `main.py` logs why on
+   stderr rather than failing to start. This resolves itself automatically
+   once the app is packaged as a systemd service with `TTYPath=/dev/tty1`
+   (not done yet -- see `CLAUDE.md`'s "Known gaps").
+
 ## Controls
 
 ### Today: web remote
