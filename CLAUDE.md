@@ -104,8 +104,9 @@ largely unaffected.
 | `player.py` | Thin mpv subprocess wrapper. One subprocess per video; `skip()` just terminates it. |
 | `input_device.py` | Input abstraction. Currently `KeyboardInput` (w/s or arrows, Enter/Space, k, q) built for the old menu-tree model -- **will be replaced** per the interaction model above, not just extended. |
 | `menu.py` | Currently a discrete state machine: Genre list -> Era list -> shuffle -> play loop, reshuffling and looping forever once the set is exhausted until skip/quit. **Will be replaced** with the dual-dial live-tuning model above. |
-| `main.py` | Entry point; dependency check (mpv installed? yt-dlp importable?) before touching the menu. Also starts `library_server.py`'s `run_server()` in a background daemon thread (via `_start_library_server()`), catching `OSError` so a bind failure (e.g. port 80 without the setcap grant) logs a warning instead of crashing the jukebox. |
+| `main.py` | Entry point; dependency check (mpv installed? yt-dlp importable? rich importable?) before touching the menu. Also starts `library_server.py`'s `run_server()` in a background daemon thread (via `_start_library_server()`), catching `OSError` so a bind failure (e.g. port 80 without the setcap grant) logs a warning instead of crashing the jukebox. Startup/shutdown console output is delegated to `splash.py`. |
 | `library_server.py` | HTTP endpoint (no auth, LAN-only) for replacing `config/library.csv` from the network without ssh/scp, and for triggering/monitoring a `video_cache.warm_cache()` run with a persisted failure log (`config.WARM_CACHE_LOG`). `run_server(host, port)` is the reusable entry point -- `main()` (CLI/argparse) and `main.py`'s background thread both call it. |
+| `splash.py` | Static ASCII-art "SPIN CYCLE" startup banner and retro-styled (amber LCD look, via `rich`) startup/shutdown console text. One-shot render, not a live dashboard -- `show_startup()`/`show_shutdown()` are each called once from `main.py`. Relies on `rich`'s own TTY/color detection so it renders correctly both from an interactive terminal and from a systemd-owned `/dev/tty1` console (the eventual deployment target). |
 
 ## Library format
 
@@ -146,7 +147,7 @@ python3 main.py
 python3 library_server.py
 
 # Syntax-check everything
-python3 -m py_compile config.py library.py video_cache.py player.py input_device.py menu.py main.py library_server.py
+python3 -m py_compile config.py library.py video_cache.py player.py input_device.py menu.py main.py library_server.py splash.py
 ```
 
 There's no test suite yet -- `library.py`'s `__main__` block and manual runs
@@ -160,7 +161,7 @@ lock/unlock transitions) once it exists.
 
 ## Conventions
 
-- Python 3, no framework, minimal dependencies (only `yt-dlp` in
+- Python 3, no framework, minimal dependencies (`yt-dlp` and `rich` in
   `requirements.txt`; `mpv`, `gpiozero`, and the I2C LCD library (`RPLCD`)
   are the other expected runtime dependencies once hardware lands --
   `mpv` is a system package, `gpiozero`/`RPLCD` are pip packages).
