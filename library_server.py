@@ -43,10 +43,17 @@ _warm_lock = threading.Lock()
 _warm_state = {"running": False, "current": 0, "total": 0, "label": ""}
 
 _WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
+_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
 _STATIC_FILES = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/style.css": ("style.css", "text/css; charset=utf-8"),
-    "/app.js": ("app.js", "application/javascript; charset=utf-8"),
+    "/": (os.path.join(_WEB_DIR, "index.html"), "text/html; charset=utf-8"),
+    "/style.css": (os.path.join(_WEB_DIR, "style.css"), "text/css; charset=utf-8"),
+    "/app.js": (os.path.join(_WEB_DIR, "app.js"), "application/javascript; charset=utf-8"),
+    "/images/spin_cycle_logo_full.png": (os.path.join(_IMAGES_DIR, "spin_cycle_logo_full.png"), "image/png"),
+    "/images/spin_cycle_icon_128.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_128.png"), "image/png"),
+    "/images/spin_cycle_icon_256.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_256.png"), "image/png"),
+    "/images/spin_cycle_icon_512.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_512.png"), "image/png"),
+    "/images/background.jpg": (os.path.join(_IMAGES_DIR, "background.jpg"), "image/jpeg"),
+    "/favicon.ico": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_128.png"), "image/png"),
 }
 
 
@@ -217,8 +224,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- static files ------------------------------------------------------
 
     def _serve_static(self, path):
-        filename, content_type = _STATIC_FILES[path]
-        file_path = os.path.join(_WEB_DIR, filename)
+        file_path, content_type = _STATIC_FILES[path]
         try:
             with open(file_path, "rb") as f:
                 body = f.read()
