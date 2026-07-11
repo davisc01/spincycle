@@ -68,17 +68,6 @@
     <h2>Settings</h2>
 
     <section>
-      <h3>Cache storage location</h3>
-      <p id="cache-root-locked-note" hidden>This deployment fixes the cache location at build/deploy time (see "Deployment info" below) -- editing it here wouldn't reach the actual mounted storage, so there's nothing to change from this page.</p>
-      <form id="cache-root-form">
-        <p>Local path where downloaded videos are cached (e.g. your external drive's mount point).</p>
-        <input type="text" id="cache-root-input" placeholder="/mnt/usbdrive/spincycle_cache" required>
-        <button type="submit">Save</button>
-      </form>
-      <p id="cache-root-result"></p>
-    </section>
-
-    <section>
       <h3>Library (config/library.csv)</h3>
       <p id="library-status"></p>
       <a id="download-link" href="/library.csv" download="library.csv">Download current library.csv</a>
