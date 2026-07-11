@@ -171,7 +171,11 @@ mkdir -p "$CACHE_HOST_DIR"
 # set_cache_root() for why that silently breaks things), that value
 # persists across redeploys and permanently shadows this mount. Reset it
 # on every run so a stale value can't linger.
-echo '{"cache_root": "/cache"}' > "$APP_DIR/config/settings.json"
+# sudo tee, not a plain redirect: the container runs privileged/as root, so
+# anything it previously wrote into this bind-mounted config/ dir (this
+# file included) is root-owned on the host -- your normal user can't
+# overwrite it directly.
+echo '{"cache_root": "/cache"}' | sudo tee "$APP_DIR/config/settings.json" > /dev/null
 
 echo
 echo "--- Building the jukebox image ---"
