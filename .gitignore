@@ -23,4 +23,8 @@ index.json
 yt-dlp-archive.txt
 
 # Per-device runtime settings (e.g. the cache root path set via the web UI)
-config/settings.json
+app/config/settings.json
+
+# Deploy-target-local runtime data (e.g. fallback video cache dir when no
+# --cache-root is given to a deploy/<target>/install.sh)
+deploy/*/data/

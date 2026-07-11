@@ -28,108 +28,80 @@ below for what exists now vs. what's coming.
 
 ## Setup on the Pi (Raspberry Pi OS 64-bit)
 
-The app lives at `/opt/apps/jukebox`. `/opt/apps` is chown'd to your user
-(e.g. `pi`) so you can clone/pull and manage the venv without `sudo`; `/opt`
-itself stays root-owned.
+The jukebox app itself lives in [`app/`](app/): a device-agnostic
+codebase with a `Dockerfile`, no assumptions baked in about which machine
+it runs on. Per-target install scripts live under `deploy/` -- today
+that's [`deploy/raspberrypi/`](deploy/raspberrypi/); a different device or
+deployment method later would be a new sibling folder that builds the
+same `app/` image rather than a fork of the codebase. Clone the repo
+anywhere your user can write -- no fixed install path required:
 
-1. System packages:
-   ```
-   sudo apt update
-   sudo apt install mpv python3-full
-   ```
+```
+git clone <repo-url> jukebox
+cd jukebox/deploy/raspberrypi
+./install.sh
+```
 
-2. Get the code onto the Pi and create a virtual environment. Raspberry Pi
-   OS's system Python is externally managed (PEP 668) and refuses
-   `pip install` outside a venv, so don't reach for `--break-system-packages`
-   -- just use a venv like anywhere else:
-   ```
-   git clone <repo-url> /opt/apps/jukebox
-   cd /opt/apps/jukebox
-   python3 -m venv venv
-   venv/bin/pip install -r requirements.txt
-   ```
-   From here on, run everything via `venv/bin/python3` (or `source
-   venv/bin/activate` first).
+`install.sh` does everything by hand-setup used to require:
 
-3. Plug in your external USB drive and note its mount point, e.g. `/media/pi/JUKEBOX`.
-   Point the app at it:
-   ```
-   export JUKEBOX_CACHE_ROOT=/media/pi/JUKEBOX/jukebox_cache
-   ```
-   (Add this line to `~/.bashrc` or a systemd service's `Environment=` so it's
-   always set.) If you'd rather not deal with environment variables at all,
-   skip this step -- `main.py` boots fine either way -- and instead set the
-   cache path from the web remote's Settings panel ("Cache storage
-   location") once it's running (step 7). That takes effect immediately (no
-   restart) and is remembered across restarts in `config/settings.json`,
-   which then takes priority over `JUKEBOX_CACHE_ROOT` from then on.
+- installs **Podman** (a daemonless container runtime -- ships directly in
+  Raspberry Pi OS's own apt repo, no third-party repo needed)
+- forces 720p HDMI output by editing `config.txt` and `cmdline.txt` in
+  `/boot/firmware` (older Raspberry Pi OS: `/boot`) -- see "Customizing
+  the HDMI resolution" below for *why* three separate places need this
+  if you ever need to change it
+- builds the jukebox container image from `app/`
+- installs and enables a systemd service (`jukebox.service`, generated via
+  `podman generate systemd`) that runs the jukebox as a **privileged**
+  container -- broad host device access (GPU/DRM, V4L2 hardware decode,
+  ALSA, the physical console, and later GPIO/I2C once the rotary
+  encoders/LCD land) in exchange for not having to hand-enumerate exact
+  device nodes. Consistent with the trust level already implied by the
+  web remote having no authentication -- this is a single-purpose LAN
+  appliance, not a multi-tenant server.
 
-   Without either one set, the app falls back to a `cache/` folder inside
-   the repo just so it always boots -- it's `.gitignore`'d and works
-   everywhere, but it lives on the same storage as the code (the SD card,
-   on a Pi), which defeats the point of using an external drive (see
-   "Target hardware" in `CLAUDE.md`). Don't leave it there for real parties;
-   a bad or unmounted path is never fatal (the web remote still comes up so
-   you can fix it), and the main page shows a warning banner whenever the
-   configured cache folder isn't actually usable.
+It prompts for confirmation before editing boot files or installing the
+service, and prompts for your video cache location (see below). Non-
+interactive re-runs (e.g. after a `git pull`) can skip both prompts:
 
-4. If your TV supports 4K, the Pi 4 will often auto-negotiate a 4K HDMI
-   mode -- but our cached videos are H.264 at modest source resolutions
-   (see "Why H.264, not VP9/AV1" below), and decoding/scaling them up to
-   drive a 4K output can make mpv fall behind and drift out of audio/video
-   sync. Force the Pi to output 720p instead by adding these lines to
-   `/boot/firmware/config.txt` (older Raspberry Pi OS: `/boot/config.txt`):
-   ```
-   hdmi_force_hotplug=1
-   hdmi_group=1
-   hdmi_mode=4
-   ```
-   `hdmi_mode=4` is 1280x720@60Hz in the CEA (`hdmi_group=1`) mode table --
-   the right table for a TV rather than a PC monitor.
+```
+./install.sh --cache-root=/media/pi/JUKEBOX/jukebox_cache --yes
+```
 
-   These `config.txt` lines alone only cover the firmware-level boot splash,
-   though -- with the full `vc4-kms-v3d` KMS driver this project requires
-   (see `CLAUDE.md`'s "Target hardware"), the kernel's DRM driver does its
-   own EDID negotiation once Linux takes over and reverts to the TV's
-   preferred (usually highest) mode, ignoring `hdmi_mode`. That's the
-   "starts at 720p, then jumps back up" symptom -- the switch happens right
-   when the KMS driver loads, not at mpv start. To actually lock the
-   post-boot mode, also force it on the kernel command line in
-   `/boot/firmware/cmdline.txt` (older Raspberry Pi OS: `/boot/cmdline.txt`).
-   That file must stay a single line -- append (don't insert a newline):
-   ```
-   video=HDMI-A-1:1280x720@60D
-   ```
-   The `D` suffix forces that exact timing rather than treating it as a
-   fallback hint the driver can still override with EDID's preferred mode.
-   If the TV is on the Pi 4's other HDMI port (the one nearer the audio
-   jack, if you moved it) use `HDMI-A-2` instead. Check which connector
-   name is actually live first:
-   ```
-   for f in /sys/class/drm/card*-HDMI-*; do echo "$f: $(cat $f/status)"; done
-   ```
-   and match the `connected` one to `HDMI-A-1`/`HDMI-A-2` in the `video=`
-   argument. Reboot after editing. Confirm the active mode afterwards with
-   `dmesg | grep -i drm` or `modetest -c` (from `libdrm-tests`) -- don't
-   rely on `tvservice`, it's a legacy-firmware-driver tool and doesn't
-   reflect reality under `vc4-kms-v3d`.
+Re-run `install.sh` any time you update the code -- every step is
+idempotent (it won't duplicate boot config lines, and it rebuilds the
+image and recreates the systemd service cleanly even if one's already
+installed), which doubles as the upgrade path after a `git pull`.
 
-   Locking the console mode still isn't the whole story, though: mpv's own
-   DRM output (`--gpu-context=drm`, what it auto-selects with no desktop
-   session running) defaults `--drm-mode` to `preferred`, which re-reads
-   the TV's EDID and requests its highest-resolution mode the instant mpv
-   opens the display -- independent of and overriding the `video=` lock
-   above. That's why the TV can still jump back to 4K (and drift out of
-   sync) specifically when a track starts playing, even once the idle
-   console is confirmed to be 720p. `config.py`'s `DRM_CONNECTOR` and
-   `DRM_MODE` pin mpv to the same connector/mode as `cmdline.txt` so it
-   doesn't renegotiate -- update both if you used `HDMI-A-2` or a different
-   resolution above. Use `mpv --drm-connector=help` / `--drm-mode=help` on
-   the Pi to see the exact valid values for your hardware if `1280x720@60`
-   isn't accepted as-is.
+Once it's done, the service is already enabled and running:
 
-5. Add your videos to `config/library.csv`. It's a plain CSV with these
-   columns (header row required):
+```
+sudo systemctl status jukebox     # is it up?
+journalctl -u jukebox -f          # live logs
+sudo systemctl restart jukebox    # after editing config.py, etc.
+```
+
+A few things are still manual, since they're about your specific setup
+rather than anything `install.sh` can decide for you:
+
+1. **Video cache location.** `install.sh` prompts for your external USB
+   SSD's mount point (e.g. `/media/pi/JUKEBOX`) and bind-mounts it into
+   the container at `/cache` (`JUKEBOX_CACHE_ROOT=/cache` inside the
+   container). You can leave it blank at install time and set it later
+   from the web remote's Settings panel ("Cache storage location")
+   instead -- that takes effect immediately (no restart) and is
+   remembered in `config/settings.json`, which then takes priority.
+   Without either one set, the container falls back to a local dir under
+   `deploy/raspberrypi/data/cache` -- it's `.gitignore`'d and works
+   everywhere, but it lives on the SD card, which defeats the point of
+   using an external drive (see "Target hardware" in `CLAUDE.md`). Don't
+   leave it there for real parties; a bad or unmounted path is never
+   fatal (the web remote still comes up so you can fix it), and the main
+   page shows a warning banner whenever the configured cache folder isn't
+   actually usable.
+
+2. **Add your videos to `config/library.csv`.** It's a plain CSV with
+   these columns (header row required):
    ```
    artist,song,genre,era,url
    Example Artist,Example Song,Rock,80s,https://www.youtube.com/watch?v=XXXXXXXXXXX
@@ -138,81 +110,104 @@ itself stays root-owned.
    JSON structure. Rows missing a genre, era, or url are skipped with a
    warning rather than breaking the app. A starter library of 18 well-known
    tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s ships in the repo.
+   `install.sh` bind-mounts `app/config` into the container (rather than
+   baking it into the image), so edits here -- by hand, `git pull`, or via
+   the web UI upload below -- take effect on the next `sudo systemctl
+   restart jukebox` without rebuilding the image, and persist across
+   image rebuilds.
 
    Instead of editing the file directly on the Pi (scp/git pull), open the
-   web remote's Settings panel (see step 7) from any browser on your LAN at
+   web remote's Settings panel from any browser on your LAN at
    `http://<pi-ip>/` (or `http://raspberrypi.local/` -- Raspberry Pi OS
    runs Avahi/mDNS by default, so the `.local` hostname resolves on the LAN
    without knowing the Pi's IP) and download/upload `library.csv` from
    there. Uploads are validated before being accepted, so a malformed CSV
    never overwrites the live one. **No authentication** -- LAN-only, same
-   trust level as ssh. The web server starts automatically in the
-   background whenever `main.py` runs (step 7); run `venv/bin/python3
-   library_server.py` directly if you want library upload/download and
-   cache-warming without launching full playback (e.g. remote library
-   maintenance between parties) -- the genre/era/skip/stop controls simply
-   report unavailable (503) when run this way, since there's no
-   `JukeboxController` behind them.
+   trust level as ssh.
 
-   It binds port 80 by default so you don't need `:8080` in the URL, but
-   port 80 is privileged on Linux -- binding it will fail with "Permission
-   denied" unless you either run as root (not recommended here, since the
-   server accepts file uploads and has no auth) or grant the interpreter
-   permission to bind low ports once:
+3. **(Optional but recommended) Pre-warm the cache** so party night
+   doesn't depend on your internet connection:
    ```
-   sudo setcap 'cap_net_bind_service=+ep' $(readlink -f venv/bin/python3)
+   sudo podman run --rm -v "$PWD/../../app/config:/app/config" \
+     -v "$PWD/data/cache:/cache" -e JUKEBOX_CACHE_ROOT=/cache \
+     jukebox:latest python3 video_cache.py
    ```
-   Re-run that command any time you rebuild the venv (a new `python3`
-   binary needs the capability reapplied). This applies whether you run
-   `library_server.py` standalone or via `main.py` -- both bind the same
-   port with the same interpreter. If the capability isn't granted,
-   `main.py` still runs the jukebox fine; it just logs that the web page
-   couldn't start and carries on. No firewall changes are needed on a
-   stock Raspberry Pi OS install -- it doesn't ship with `ufw` enabled by
-   default.
+   (adjust the cache volume path to match whatever you gave `--cache-root`
+   at install time). This walks the whole library and downloads anything
+   not yet cached, printing progress as it goes. Safe to re-run any time
+   you add new URLs -- already-cached videos are skipped instantly. The
+   web remote's Settings panel also has a "Warm cache" button that does
+   this remotely, with a live progress line and a scrollable log of
+   anything that failed to download.
 
-6. (Optional but recommended) Pre-warm the cache so party night doesn't
-   depend on your internet connection:
-   ```
-   venv/bin/python3 video_cache.py
-   ```
-   This walks the whole library and downloads anything not yet cached,
-   printing progress as it goes. Safe to re-run any time you add new URLs --
-   already-cached videos are skipped instantly. The web remote's Settings
-   panel (step 7) has a "Warm cache" button that does this remotely, with a
-   live progress line and a scrollable log of anything that failed to
-   download.
+Open `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on
+your laptop or phone: pick a genre and an era and playback starts
+automatically (re-picking either one re-tunes: stops the current video and
+starts the new combination), Skip/Stop control the current track, and the
+Settings button opens the library upload/download, cache-warm, and log
+panels from steps above.
 
-7. Run the jukebox:
-   ```
-   venv/bin/python3 main.py
-   ```
-   This starts a `JukeboxController` plus the web remote from step 5 in the
-   background -- same host/port, same setcap requirement. Open
-   `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on your
-   laptop or phone: pick a genre and an era and playback starts
-   automatically (re-picking either one re-tunes: stops the current video
-   and starts the new combination), Skip/Stop control the current track,
-   and the Settings button opens the library upload/download, cache-warm,
-   and log panels from steps 4-5.
+### Customizing the HDMI resolution / connector
 
-   `main.py` also prints a retro "Spin Cycle" splash to whatever launched
-   it, and tries to write it directly to the physical console
-   (`/dev/tty1` by default, see `config.CONSOLE_TTY`) so the idle screen
-   looks like part of the device on the TV, not just in your SSH session
-   -- mpv already renders straight to that display over DRM/KMS regardless
-   of how you launched the process, so the splash does the same. Current
-   Raspberry Pi OS ships `/dev/tty1` as `root`-only (`crw-------`, no
-   group-write bit) -- console access is granted dynamically per logged-in
-   session rather than via static group permissions, so adding your user
-   to the `tty` group won't help. If you're testing over SSH as a regular
-   user and only see the splash there (with the TV still showing the login
-   prompt), run as root for now (`sudo venv/bin/python3 main.py`) -- if it
-   still can't open the console, `main.py` logs why on stderr rather than
-   failing to start. This resolves itself properly once the app is
-   packaged as a systemd service with `TTYPath=/dev/tty1` (not done yet --
-   see `CLAUDE.md`'s "Known gaps"): systemd grants the service temporary
-   ownership of that device itself, no `sudo` needed at that point.
+`install.sh` defaults to forcing 720p on `HDMI-A-1` (auto-detecting a
+different connected port and warning you if it finds one). You shouldn't
+need to touch this unless you're changing resolution or moving the TV to
+the Pi's other HDMI port, but it's worth understanding *why* it takes
+three separate places to actually stick, in case something needs
+hand-tuning:
+
+1. **Firmware-level boot splash** -- `hdmi_force_hotplug=1` /
+   `hdmi_group=1` / `hdmi_mode=4` in `config.txt` (`hdmi_mode=4` is
+   1280x720@60Hz in the CEA mode table, the right table for a TV rather
+   than a PC monitor). This alone only covers the firmware splash, though.
+2. **Kernel/KMS-level lock** -- with the full `vc4-kms-v3d` KMS driver
+   this project requires (see `CLAUDE.md`'s "Target hardware"), the
+   kernel's DRM driver does its own EDID negotiation once Linux takes
+   over and reverts to the TV's preferred (usually highest) mode,
+   ignoring `hdmi_mode`. That's the "starts at 720p, then jumps back up"
+   symptom. Locking the post-boot mode needs a `video=HDMI-A-1:1280x720@60D`
+   argument appended to `cmdline.txt` (single line, no newline inserted).
+   The `D` suffix forces that exact timing rather than a fallback hint the
+   driver can still override. If you move the TV to the Pi 4's other HDMI
+   port, re-run `install.sh` (it re-detects the connector) or edit
+   `cmdline.txt` by hand with `HDMI-A-2`. Check which connector is live:
+   ```
+   for f in /sys/class/drm/card*-HDMI-*; do echo "$f: $(cat $f/status)"; done
+   ```
+   Reboot after editing. Confirm the active mode with `dmesg | grep -i
+   drm` or `modetest -c` (from `libdrm-tests`) -- don't rely on
+   `tvservice`, it's a legacy-firmware-driver tool and doesn't reflect
+   reality under `vc4-kms-v3d`.
+3. **mpv's own DRM output** -- even with 1 and 2 locked, mpv's
+   `--gpu-context=drm` defaults `--drm-mode` to `preferred`, re-reading
+   the TV's EDID and requesting its highest-resolution mode the instant
+   mpv opens the display, independent of the `cmdline.txt` lock. That's
+   why the TV can jump back to 4K (and drift out of audio/video sync)
+   specifically when a track starts playing. `config.py`'s
+   `DRM_CONNECTOR`/`DRM_MODE` pin mpv to the same connector/mode as
+   `cmdline.txt` -- **`install.sh` does not edit this file**; if you use a
+   non-default connector or resolution, update `DRM_CONNECTOR`/`DRM_MODE`
+   in `app/config.py` by hand to match, then `sudo systemctl restart
+   jukebox` (no image rebuild needed if you only touched `config.py`
+   values that are read at runtime -- but note `config.py` itself *is*
+   baked into the image, so a source change here does need a re-run of
+   `install.sh` to rebuild). Use `mpv --drm-connector=help` /
+   `--drm-mode=help` on the Pi to see valid values for your hardware.
+
+### `/dev/tty1` and the console splash
+
+`main.py` prints a retro "Spin Cycle" splash and tries to write it
+directly to the physical console (`/dev/tty1` by default, see
+`config.CONSOLE_TTY`) so the idle screen looks like part of the device on
+the TV, not just in your SSH session -- mpv already renders straight to
+that display over DRM/KMS regardless of how the process was launched, so
+the splash does the same. Current Raspberry Pi OS ships `/dev/tty1` as
+`root`-only (`crw-------`) -- console access is granted dynamically per
+logged-in session rather than via static group permissions, so a
+non-root process on the host can't normally open it. The container
+sidesteps this entirely: `jukebox.service` runs the container as a
+privileged root process, which can open `/dev/tty1` directly, no
+`TTYPath=` dance needed the way a bare host process would.
 
 ## Controls
 
@@ -220,7 +215,7 @@ itself stays root-owned.
 
 Until the rotary encoders and LCD are wired up, `main.py` starts a
 `JukeboxController` and drives it from the browser-based web remote
-(`http://<pi-ip>/`, see step 7 above): a genre `<select>`, an era
+(`http://<pi-ip>/`, see "Setup on the Pi" above): a genre `<select>`, an era
 `<select>`, and Skip/Stop buttons. Picking a genre and an era starts
 playback automatically -- no separate confirm step, since picking from a
 dropdown is already a deliberate action. Changing either selection
@@ -241,10 +236,12 @@ confirm menu:
 | k              | Press the skip button (next track) |
 | q              | Back out of a menu / stop playback and return to menu |
 
-It's dev/testing-only now -- run it directly with `venv/bin/python3
-menu.py`; `main.py` no longer starts it, since running it alongside the web
-remote would mean two independent mpv processes fighting over the same
-screen and speaker.
+It's dev/testing-only now -- run it directly with `python3 menu.py` from a
+local Python environment with `requirements.txt` installed and `mpv` on
+your `PATH` (not something `deploy/raspberrypi/install.sh` sets up, since
+the container is the production path); `main.py` no longer starts it,
+since running it alongside the web remote would mean two independent mpv
+processes fighting over the same screen and speaker.
 
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
@@ -278,6 +275,14 @@ automatically once you stop turning.
 
 ## Project layout
 
+- [`app/`](app/) - the jukebox codebase itself, device-agnostic. Builds
+  one container image (`app/Dockerfile`) that every `deploy/` target
+  runs. All paths below are relative to `app/` unless noted.
+- [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` (see "Setup
+  on the Pi" above) plus its gitignored `data/` dir (fallback cache when
+  no `--cache-root` is given). A future deployment target (different
+  device, different install method) would be a new sibling under
+  `deploy/`, reusing `app/`'s image rather than forking the codebase.
 - `config.py` - paths, yt-dlp format string, mpv settings. Edit this first.
 - `config/library.csv` - your actual video library: artist, song, genre,
   era, url. Easiest file to hand-edit; open it in any text editor or

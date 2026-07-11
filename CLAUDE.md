@@ -12,6 +12,17 @@ a lazy caching layer downloads each video once via yt-dlp and plays the
 local copy on every subsequent request, so runtime playback never depends
 on network availability.
 
+The codebase is device-agnostic and lives in `app/` -- all file paths
+below are relative to that directory, not the repo root, unless noted.
+`app/` builds a single container image (`app/Dockerfile`) via Podman;
+per-target install scripts that deploy that image live under `deploy/`
+(currently `deploy/raspberrypi/`) -- a future deployment target (a
+different device, or a different install method for the Pi) is a new
+sibling under `deploy/` reusing the same `app/` image, not a fork of the
+codebase. `case/` (3D-printed case files) and this `CLAUDE.md`/`README.md`
+stay at the repo root since they're either target-agnostic or describe
+the whole repo.
+
 ## Target hardware / environment
 
 - **Raspberry Pi 4**, Raspberry Pi OS (64-bit, current `vc4-kms-v3d` driver
@@ -96,8 +107,13 @@ largely unaffected.
 
 ## Architecture (current code, pre-radio-redesign)
 
+All paths are relative to `app/`, except `deploy/raspberrypi/install.sh`
+which is called out explicitly below.
+
 | File | Responsibility |
 |---|---|
+| `Dockerfile` | Builds the jukebox image: `python:3.11-slim-bookworm` + `mpv`/`ffmpeg`/`ca-certificates` via apt, `requirements.txt` via pip, then the app code. `ENTRYPOINT` is `python3 main.py`. `ffmpeg` is required (not just `mpv`) because `config.FORMAT_SELECTOR`'s `bestvideo+bestaudio` merges need it -- easy to miss since a bare-metal Pi OS install often has it incidentally. |
+| `deploy/raspberrypi/install.sh` | The only Pi-specific piece: installs Podman, idempotently forces 720p in the boot config (`config.txt`/`cmdline.txt`, detecting the live HDMI connector), builds the image from `app/`, and installs+enables a `jukebox.service` systemd unit generated via `podman generate systemd --new` (bakes the full `podman run` invocation into the unit, so re-running install.sh safely regenerates it). Runs the container `--privileged` with `--network host`, bind-mounting `app/config` (so `library.csv`/`settings.json` edits persist) and the cache root at `/cache`. See README.md's "Setup on the Pi". |
 | `config.py` | Paths, yt-dlp format selector, mpv args. Start here for any environment-specific change. |
 | `library.py` | Parses `config/library.csv` into `{genre: {era: [track_dict]}}`. Track dicts have `artist`/`song`/`url`. Also exposes `genre_options()`/`era_options()`/`tracks_for()`, which layer the `ANY_GENRE`/`ANY_ERA` ("Anything"/"Anytime") wildcard picks on top of the raw structure -- `menu.py` (and eventually the dial-driven picker) should go through these rather than indexing the dict directly. |
 | `video_cache.py` | Lazy caching: `ensure_cached(url)` returns a local path, downloading via yt-dlp only if not already indexed. `warm_cache()` walks the whole library (used by the standalone `python3 video_cache.py` pre-warm run). Index is a JSON file (`url -> local path`), written atomically. |
@@ -127,6 +143,10 @@ matching track list.
 
 ## Commands
 
+Local dev/testing (from within `app/`, `cd app` first) doesn't require a
+container -- just a Python environment with `requirements.txt` installed
+and `mpv` on `PATH`:
+
 ```bash
 # Sanity-check the library parses correctly
 python3 library.py
@@ -134,20 +154,30 @@ python3 library.py
 # Pre-warm the video cache (walks entire library, downloads anything missing)
 python3 video_cache.py
 
-# Run the jukebox (keyboard-driven menu mockup, pre-radio-redesign) --
-# this also starts the library-management web server (below) in the
-# background automatically
+# Run the jukebox -- starts a JukeboxController plus the library-management
+# web server (below) in the background automatically.
 python3 main.py
 
 # Start just the library-management web server (upload a new library.csv,
 # trigger/monitor cache warming), without launching full playback -- binds
-# 0.0.0.0:80 by default, which needs root or cap_net_bind_service (see
-# library_server.py's module docstring and README.md's "Setup on the Pi"
-# section)
+# 0.0.0.0:80 by default, which needs root or cap_net_bind_service outside
+# a container (see library_server.py's module docstring)
 python3 library_server.py
 
 # Syntax-check everything
-python3 -m py_compile config.py library.py video_cache.py player.py input_device.py menu.py main.py library_server.py splash.py
+python3 -m py_compile config.py library.py video_cache.py player.py controller.py input_device.py menu.py main.py library_server.py splash.py
+```
+
+On a Pi, `deploy/raspberrypi/install.sh` builds the image and runs
+`main.py` as a systemd-managed Podman container instead (`jukebox.service`
+-- see README.md's "Setup on the Pi"). Useful commands there:
+
+```bash
+cd deploy/raspberrypi
+./install.sh                        # first deploy, or re-run after git pull
+sudo systemctl status jukebox       # is it up?
+journalctl -u jukebox -f            # live logs
+sudo systemctl restart jukebox      # after editing app/config/library.csv, etc.
 ```
 
 There's no test suite yet -- `library.py`'s `__main__` block and manual runs
@@ -175,6 +205,13 @@ lock/unlock transitions) once it exists.
 
 ## Known gaps / next steps
 
+- **Unverified**: hardware-accelerated V4L2 M2M decode + direct DRM/KMS
+  scanout from inside the Podman container hasn't been confirmed on real
+  Pi 4 hardware yet -- `--privileged` grants device *access*, but a
+  userspace (container) vs kernel (host `vc4-kms-v3d`) driver version
+  mismatch is still possible. If playback falls back to software decode
+  or DRM output fails inside the container, the fix is almost certainly
+  in `app/Dockerfile`'s base image/package choices, not the deploy layer.
 - Hardware (LCD, 2x rotary encoders) is on order, not yet on the bench --
   `input_device.py`/`menu.py` still reflect the old discrete-menu keyboard
   mockup, not the radio-tuner model described above.
@@ -182,7 +219,6 @@ lock/unlock transitions) once it exists.
   `RPLCD`-based display layer (top row genre/era, bottom row status), and
   rewrite `menu.py` around live dual-dial state instead of a list-based
   state machine.
-- No systemd service file yet for auto-start on boot.
 - No 3D-printed case files in this repo yet -- consider a `case/` directory
   once STL/CAD files exist, with panel cutout dimensions matching the
   final LCD and encoder bushing sizes.
