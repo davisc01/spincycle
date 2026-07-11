@@ -65,7 +65,28 @@ def set_cache_root(path):
     persist the choice to SETTINGS_FILE. Raises OSError if `path` can't be
     created/written to -- callers should leave CACHE_ROOT unchanged in that
     case, which this does by validating before assigning.
+
+    Refuses (RuntimeError) if JUKEBOX_CACHE_ROOT is set in the environment.
+    That means a deploy layer (e.g. deploy/raspberrypi/install.sh) has
+    already pinned the real storage location via a bind mount -- typically
+    to a fixed in-container path like /cache -- and the actual host
+    directory is controlled entirely by that mount, not by any path string
+    the app itself sees. Letting this function "succeed" against some other
+    path there would just create a fresh, empty directory tree wherever the
+    app happens to be running (e.g. the container's own writable layer),
+    disconnected from the real drive, and silently swallow every future
+    download into a location that looks fine from inside the app but never
+    reaches the actual mounted storage -- and gets wiped on every container
+    recreation to boot. This bit us for real once already (see CLAUDE.md's
+    "Known gaps"), hence a hard guard rather than just a docs warning.
     """
+    if os.environ.get("JUKEBOX_CACHE_ROOT"):
+        raise RuntimeError(
+            "Cache location is fixed by this deployment (JUKEBOX_CACHE_ROOT "
+            "is set) -- change it by re-running install.sh with a different "
+            "--cache-root instead of setting it here."
+        )
+
     global CACHE_ROOT
     path = os.path.abspath(os.path.expanduser(path))
     os.makedirs(os.path.join(path, "videos"), exist_ok=True)  # validates writability
