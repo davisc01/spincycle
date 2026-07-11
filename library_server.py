@@ -313,13 +313,15 @@ class Handler(BaseHTTPRequestHandler):
         if self.controller is not None:
             self.controller.reload_library()
 
+        removed = video_cache.prune(lib)
+
         genres = len(lib)
         eras = sum(len(e) for e in lib.values())
         tracks = len(library.all_tracks(lib))
-        self._send_html(
-            200,
-            f"Upload accepted: {genres} genre(s), {eras} genre/era combination(s), {tracks} track(s).",
-        )
+        message = f"Upload accepted: {genres} genre(s), {eras} genre/era combination(s), {tracks} track(s)."
+        if removed:
+            message += f" Removed {len(removed)} cached video(s) no longer in the library."
+        self._send_html(200, message)
 
     def _handle_warm_cache(self):
         with _warm_lock:

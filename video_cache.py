@@ -83,6 +83,56 @@ def ensure_cached(url, progress_hook=None):
     return final_path
 
 
+def prune(library):
+    """
+    Remove cached video files (and their index/download-archive entries)
+    for URLs no longer present in `library`. Meant to run right after a
+    library.csv update -- deleting a row should eventually free its disk
+    space too, without touching anything still in use. Returns the list
+    of URLs removed.
+    """
+    import library as library_module  # local import to avoid a cycle at module load time
+    valid_urls = {t["url"] for t in library_module.all_tracks(library)}
+
+    with _index_lock:
+        index = _load_index()
+        removed = []
+        removed_ids = []
+        for url, path in list(index.items()):
+            if url in valid_urls:
+                continue
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError as e:
+                    print(f"[video_cache] Could not remove {path}: {e}")
+                    continue
+            del index[url]
+            removed.append(url)
+            removed_ids.append(os.path.splitext(os.path.basename(path))[0])
+
+        if removed:
+            _save_index(index)
+            _prune_archive(removed_ids)
+
+    return removed
+
+
+def _prune_archive(video_ids):
+    """Drop matching lines from yt-dlp's download-archive ledger so a
+    re-added URL with the same video ID actually re-downloads instead of
+    yt-dlp silently skipping it as 'already downloaded'."""
+    if not video_ids or not os.path.exists(config.ARCHIVE_FILE):
+        return
+    stale_ids = set(video_ids)
+    with open(config.ARCHIVE_FILE, "r") as f:
+        lines = f.readlines()
+    kept = [line for line in lines if line.split() and line.split()[-1] not in stale_ids]
+    if len(kept) != len(lines):
+        with open(config.ARCHIVE_FILE, "w") as f:
+            f.writelines(kept)
+
+
 def warm_cache(library, on_progress=None):
     """
     Walk the entire library and download anything not yet cached.
