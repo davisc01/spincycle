@@ -19,7 +19,7 @@
   const uploadResult = document.getElementById("upload-result");
   const warmStatus = document.getElementById("warm-status");
   const warmCacheBtn = document.getElementById("warm-cache-btn");
-  const cacheLog = document.getElementById("cache-log");
+  const cacheFailuresList = document.getElementById("cache-failures-list");
   const playbackLog = document.getElementById("playback-log");
   const cacheWarning = document.getElementById("cache-warning");
 
@@ -331,7 +331,7 @@
   cacheWarning.addEventListener("click", openSettings);
 
   async function refreshSettings() {
-    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshWarmStatus(), refreshLogs()]);
+    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshWarmStatus(), refreshCacheFailures(), refreshPlaybackLog()]);
   }
 
   async function refreshCacheRoot() {
@@ -363,20 +363,82 @@
       if (warmPollTimer) {
         clearInterval(warmPollTimer);
         warmPollTimer = null;
-        refreshLogs();
+        refreshCacheFailures();
+        refreshPlaybackLog();
       }
     }
   }
 
-  async function refreshLogs() {
-    const [cacheRes, playbackRes] = await Promise.all([
-      fetch("/api/logs/cache"),
-      fetch("/api/logs/playback"),
-    ]);
-    const cacheLines = await cacheRes.json();
-    const playbackLines = await playbackRes.json();
-    cacheLog.textContent = cacheLines.length ? cacheLines.join("\n") : "(none)";
+  async function refreshPlaybackLog() {
+    const res = await fetch("/api/logs/playback");
+    const playbackLines = await res.json();
     playbackLog.textContent = playbackLines.length ? playbackLines.join("\n") : "(none)";
+  }
+
+  async function refreshCacheFailures() {
+    const res = await fetch("/api/cache-failures");
+    const failures = await res.json();
+    renderCacheFailures(failures);
+  }
+
+  function renderCacheFailures(failures) {
+    cacheFailuresList.innerHTML = "";
+    if (!failures.length) {
+      const li = document.createElement("li");
+      li.textContent = "(none)";
+      cacheFailuresList.appendChild(li);
+      return;
+    }
+
+    for (const failure of failures) {
+      const li = document.createElement("li");
+      li.className = "failure-item";
+
+      const info = document.createElement("div");
+      info.className = "failure-info";
+      const title = document.createElement("span");
+      title.className = "failure-title";
+      title.textContent = failure.artist ? `${failure.artist} - ${failure.song}` : failure.url;
+      const meta = document.createElement("span");
+      meta.className = "failure-meta";
+      meta.textContent = `${failure.genre} / ${failure.era} — ${failure.error}`;
+      info.append(title, meta);
+
+      const urlInput = document.createElement("input");
+      urlInput.type = "text";
+      urlInput.className = "failure-url-input";
+      urlInput.value = failure.url;
+
+      const actions = document.createElement("div");
+      actions.className = "failure-actions";
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.textContent = "Save";
+      saveBtn.addEventListener("click", async () => {
+        const result = await postJSON("/api/cache-failures/edit", { url: failure.url, new_url: urlInput.value.trim() });
+        if (result.error) {
+          alert(result.error);
+          return;
+        }
+        renderCacheFailures(result);
+      });
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "close-session-btn";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", async () => {
+        const result = await postJSON("/api/cache-failures/remove", { url: failure.url });
+        if (result.error) {
+          alert(result.error);
+          return;
+        }
+        renderCacheFailures(result);
+      });
+      actions.append(saveBtn, removeBtn);
+
+      li.append(info, urlInput, actions);
+      cacheFailuresList.appendChild(li);
+    }
   }
 
   uploadForm.addEventListener("submit", async (event) => {
