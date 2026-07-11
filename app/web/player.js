@@ -3,6 +3,7 @@
   const session = params.get("session");
   const video = document.getElementById("v");
   const overlay = document.getElementById("overlay");
+  const tapToPlay = document.getElementById("tap-to-play");
 
   if (!session) {
     overlay.textContent = "No session specified -- open this page from the web remote's \"Launch Player\" button.";
@@ -10,6 +11,20 @@
   }
 
   let currentUrl = null;
+
+  function showTapToPlay() {
+    tapToPlay.classList.add("shown");
+  }
+
+  function hideTapToPlay() {
+    tapToPlay.classList.remove("shown");
+  }
+
+  tapToPlay.addEventListener("click", () => {
+    video.play().then(hideTapToPlay).catch(() => {});
+  });
+
+  video.addEventListener("playing", hideTapToPlay);
 
   async function poll() {
     let status;
@@ -31,12 +46,16 @@
       if (currentUrl) {
         video.src = currentUrl;
         video.play().catch(() => {
-          // Autoplay-with-sound may be blocked until the viewer interacts
-          // with this tab once -- not fixable from here, see player.html.
+          // Autoplay-with-sound blocked (common on Safari) until the
+          // viewer interacts with this tab once -- show an explicit
+          // button rather than relying on the browser's own paused icon,
+          // which is easy to miss (see player.html).
+          showTapToPlay();
         });
       } else {
         video.removeAttribute("src");
         video.load();
+        hideTapToPlay();
       }
     }
   }
