@@ -24,7 +24,12 @@
   const cacheRootForm = document.getElementById("cache-root-form");
   const cacheRootInput = document.getElementById("cache-root-input");
   const cacheRootResult = document.getElementById("cache-root-result");
+  const cacheRootLockedNote = document.getElementById("cache-root-locked-note");
   const cacheWarning = document.getElementById("cache-warning");
+
+  const infoPlaybackMode = document.getElementById("info-playback-mode");
+  const infoCacheRoot = document.getElementById("info-cache-root");
+  const infoLastWarmRun = document.getElementById("info-last-warm-run");
 
   let warmPollTimer = null;
 
@@ -337,6 +342,10 @@
     const res = await fetch("/api/cache-root");
     const data = await res.json();
     cacheRootInput.value = data.cache_root;
+    cacheRootForm.hidden = data.locked;
+    cacheRootLockedNote.hidden = !data.locked;
+    infoPlaybackMode.textContent = data.playback_mode;
+    infoCacheRoot.textContent = data.locked ? `${data.cache_root} (fixed by this deployment)` : data.cache_root;
   }
 
   async function refreshLibraryStatus() {
@@ -350,6 +359,7 @@
   async function refreshWarmStatus() {
     const res = await fetch("/api/cache-status");
     const data = await res.json();
+    infoLastWarmRun.textContent = data.last_run || "Never (since last restart)";
     if (data.running) {
       warmStatus.textContent = `Running: ${data.current}/${data.total} — ${data.label}`;
       if (!warmPollTimer) {

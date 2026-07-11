@@ -69,8 +69,9 @@
 
     <section>
       <h3>Cache storage location</h3>
-      <p>Local path where downloaded videos are cached (e.g. your external drive's mount point). If you deployed via <code>deploy/raspberrypi/install.sh</code>, this is fixed at <code>/cache</code> inside the container -- it's already bind-mounted to your real drive through the <code>--cache-root</code> you gave install.sh. Don't change it here; re-run install.sh with a different <code>--cache-root</code> instead, since editing this field only changes the path the app looks for *inside* the container, not the mount itself.</p>
+      <p id="cache-root-locked-note" hidden>This deployment fixes the cache location at build/deploy time (see "Deployment info" below) -- editing it here wouldn't reach the actual mounted storage, so there's nothing to change from this page.</p>
       <form id="cache-root-form">
+        <p>Local path where downloaded videos are cached (e.g. your external drive's mount point).</p>
         <input type="text" id="cache-root-input" placeholder="/mnt/usbdrive/spincycle_cache" required>
         <button type="submit">Save</button>
       </form>
@@ -102,6 +103,15 @@
     <section>
       <h3>Playback log</h3>
       <pre id="playback-log" class="log-pane"></pre>
+    </section>
+
+    <section>
+      <h3>Deployment info</h3>
+      <dl class="info-list">
+        <dt>Playback mode</dt><dd id="info-playback-mode"></dd>
+        <dt>Cache location</dt><dd id="info-cache-root"></dd>
+        <dt>Last cache warm run</dt><dd id="info-last-warm-run"></dd>
+      </dl>
     </section>
   </aside>
 
