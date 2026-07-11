@@ -74,7 +74,7 @@ def _consoles():
             f"[splash] Could not open console {console_tty} for the idle screen ({e}). "
             "Console devices are typically root-only until a session claims them -- run "
             "as root for now. Deployed via deploy/raspberrypi/install.sh, this isn't an "
-            "issue: the jukebox container runs privileged and can already open it. The "
+            "issue: the spincycle container runs privileged and can already open it. The "
             "banner will still show up here over SSH in the meantime.",
             file=sys.stderr,
         )

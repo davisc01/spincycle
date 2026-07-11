@@ -1,6 +1,6 @@
 # case/
 
-3D-printed enclosure files for the car-stereo-style jukebox housing go here
+3D-printed enclosure files for the car-stereo-style Spin Cycle housing go here
 (STL, STEP, F3D/CAD source, whatever your tool of choice exports). Empty
 for now -- fill in as the design comes together.
 

@@ -1,12 +1,12 @@
 """
-Central configuration for the jukebox. Edit these paths for your setup.
+Central configuration for Spin Cycle. Edit these paths for your setup.
 """
 import json
 import os
 
 # --- Storage paths -----------------------------------------------------
 # Point this at your external USB drive's mount point, e.g. via
-# JUKEBOX_CACHE_ROOT=/media/pi/JUKEBOX/jukebox_cache, or set it later from
+# SPINCYCLE_CACHE_ROOT=/media/pi/SPINCYCLE/spincycle_cache, or set it later from
 # the web remote's Settings panel (see set_cache_root() below) -- either
 # way, don't leave it on the fallback default below for real use. That
 # default is just a repo-local folder (already .gitignore'd) chosen so the
@@ -17,13 +17,13 @@ import os
 # CACHE_ROOT (and the paths derived from it below) can also be changed at
 # runtime via set_cache_root() -- the web remote's settings panel does this.
 # A change persists to SETTINGS_FILE so it survives a restart, taking
-# priority over JUKEBOX_CACHE_ROOT/the hardcoded default from then on.
+# priority over SPINCYCLE_CACHE_ROOT/the hardcoded default from then on.
 # Everything else in the app reads these as `config.VIDEO_DIR` etc. (fresh
 # attribute lookups, never a cached local copy), so a runtime change takes
 # effect immediately everywhere without a restart.
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "config", "settings.json")
 _FALLBACK_CACHE_ROOT = os.path.join(os.path.dirname(__file__), "cache")
-_DEFAULT_CACHE_ROOT = os.environ.get("JUKEBOX_CACHE_ROOT", _FALLBACK_CACHE_ROOT)
+_DEFAULT_CACHE_ROOT = os.environ.get("SPINCYCLE_CACHE_ROOT", _FALLBACK_CACHE_ROOT)
 
 
 def _load_settings():
@@ -65,7 +65,7 @@ def set_cache_root(path):
     created/written to -- callers should leave CACHE_ROOT unchanged in that
     case, which this does by validating before assigning.
 
-    Refuses (RuntimeError) if JUKEBOX_CACHE_ROOT is set in the environment.
+    Refuses (RuntimeError) if SPINCYCLE_CACHE_ROOT is set in the environment.
     That means a deploy layer (e.g. deploy/raspberrypi/install.sh) has
     already pinned the real storage location via a bind mount -- typically
     to a fixed in-container path like /cache -- and the actual host
@@ -79,9 +79,9 @@ def set_cache_root(path):
     recreation to boot. This bit us for real once already (see CLAUDE.md's
     "Known gaps"), hence a hard guard rather than just a docs warning.
     """
-    if os.environ.get("JUKEBOX_CACHE_ROOT"):
+    if os.environ.get("SPINCYCLE_CACHE_ROOT"):
         raise RuntimeError(
-            "Cache location is fixed by this deployment (JUKEBOX_CACHE_ROOT "
+            "Cache location is fixed by this deployment (SPINCYCLE_CACHE_ROOT "
             "is set) -- change it by re-running install.sh with a different "
             "--cache-root instead of setting it here."
         )
@@ -142,15 +142,15 @@ MPV_EXTRA_ARGS = [
 ]
 
 # --- Console display ------------------------------------------------------
-# The physical screen the jukebox sits in front of (a TV over HDMI, showing
+# The physical screen Spin Cycle sits in front of (a TV over HDMI, showing
 # a Linux virtual console when nothing's playing). mpv already renders
 # straight to this display via DRM/KMS no matter which session launched the
 # process; splash.py opens this device explicitly so the idle-screen banner
 # does too, rather than just going to whatever stdout main.py happened to
 # inherit (e.g. an SSH session's pty, which isn't what's on the TV).
-# Override via JUKEBOX_CONSOLE_TTY if the Pi's console isn't tty1 for some
+# Override via SPINCYCLE_CONSOLE_TTY if the Pi's console isn't tty1 for some
 # reason. Requires write access to the device -- see splash.py.
-CONSOLE_TTY = os.environ.get("JUKEBOX_CONSOLE_TTY", "/dev/tty1")
+CONSOLE_TTY = os.environ.get("SPINCYCLE_CONSOLE_TTY", "/dev/tty1")
 
 # --- Library management web page (library_server.py) ---------------------
 # Port 80 is privileged on Linux -- see library_server.py's module

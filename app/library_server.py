@@ -1,10 +1,10 @@
 """
-Standalone HTTP server serving the jukebox's web remote (web/index.html):
+Standalone HTTP server serving Spin Cycle's web remote (web/index.html):
 genre/era selection, skip/stop, and a settings panel for managing
 config/library.csv and cache warming.
 
 Not imported when menu.py's terminal keyboard mode is run standalone, but
-started automatically by main.py alongside a JukeboxController -- see that
+started automatically by main.py alongside a SpinCycleController -- see that
 file. Also runnable standalone (without a controller) for library
 maintenance only:
 
@@ -357,7 +357,7 @@ def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT,
     callers that don't want that to be fatal (main.py running this in a
     background thread) should catch it themselves.
 
-    `controller`, if given, is a JukeboxController used to serve the
+    `controller`, if given, is a SpinCycleController used to serve the
     genre/era/skip/stop API routes; without one those routes reply 503
     (library management routes -- upload, warm-cache, download -- work
     either way).
