@@ -48,10 +48,9 @@ CACHE_ROOT = _load_settings().get("cache_root") or _DEFAULT_CACHE_ROOT
 
 
 def _recompute_cache_paths():
-    global VIDEO_DIR, INDEX_FILE, ARCHIVE_FILE, WARM_CACHE_LOG, PLAYBACK_LOG
+    global VIDEO_DIR, INDEX_FILE, WARM_CACHE_LOG, PLAYBACK_LOG
     VIDEO_DIR = os.path.join(CACHE_ROOT, "videos")
     INDEX_FILE = os.path.join(CACHE_ROOT, "index.json")       # url -> local path map
-    ARCHIVE_FILE = os.path.join(CACHE_ROOT, "yt-dlp-archive.txt")  # yt-dlp's own "already downloaded" ledger
     WARM_CACHE_LOG = os.path.join(CACHE_ROOT, "warm_cache_failures.log")  # append-only log of failed downloads
     PLAYBACK_LOG = os.path.join(CACHE_ROOT, "playback.log")  # append-only log of track plays/skips/errors
 
