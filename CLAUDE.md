@@ -207,24 +207,36 @@ lock/unlock transitions) once it exists.
 
 - **Confirmed on real Pi 4 hardware**: hardware-accelerated V4L2 M2M
   decode + direct DRM/KMS scanout work fine from inside the privileged
-  Podman container -- no base-image changes needed there. Audio didn't,
-  though: ALSA's `plughw` format negotiation against `vc4-hdmi` failed
-  inside the container ("Sample format not available for playback")
-  even though `/dev/snd` and `/proc/asound/cards` were identical to the
-  host. Root cause: Raspberry Pi OS's `alsa-utils`/`libasound2` (the
-  Raspberry Pi Foundation's own build, `+rpt` suffix) ships card-specific
-  config (`/usr/share/alsa/cards/vc4-hdmi.conf`) that plain Debian's ALSA
-  packages -- what `app/Dockerfile`'s base image uses -- don't have.
-  Device *node* visibility isn't the same as ALSA *userspace config*
-  knowing how to negotiate with that specific card. Fixed by bind-mounting
-  `/usr/share/alsa` read-only from host in `deploy/raspberrypi/
-  install.sh`'s `podman create` (see the comment there) rather than
-  changing the shared `app/Dockerfile` -- this is a Pi-hardware quirk, so
-  it belongs in the Pi-specific deploy layer, not the device-agnostic
-  image. Worth remembering as a pattern for future ALSA-touching devices:
-  check for `<vendor>-rpt`-style package suffixes and `/usr/share/alsa/
-  cards/*.conf` before assuming a "device not found" or format-negotiation
-  failure is a permissions/passthrough problem.
+  Podman container -- no base-image changes needed there. Audio took two
+  rounds to fix, though: ALSA's format negotiation against `vc4-hdmi`
+  failed inside the container ("Sample format not available for
+  playback") even though `/dev/snd` and `/proc/asound/cards` were
+  identical to the host, and even after bind-mounting the host's
+  `/usr/share/alsa` (which has `cards/vc4-hdmi.conf`, defining a `hdmi`
+  PCM type that does software IEC958 subframe conversion -- vc4-hdmi
+  apparently can't negotiate a format at all without that wrapper) into
+  the container. The config file loading wasn't enough on its own: the
+  actual root cause was a Debian *generation* mismatch, not a missing
+  file. Raspberry Pi OS had already moved to Debian **Trixie** (13), where
+  `libasound2t64` is `1.2.14`; `app/Dockerfile`'s base image was
+  `python:3.11-slim-bookworm` (Debian 12), whose `libasound2` is `1.2.8`
+  -- too old to correctly execute config written for the newer alsa-lib.
+  Fixed by changing the base image to `python:3.11-slim-trixie`. Confirmed
+  vanilla Debian Trixie's own `libasound2-data` already ships
+  `cards/vc4-hdmi.conf` (identical file size to the Raspberry Pi
+  Foundation's `+rpt`-patched build) -- this was never actually a
+  Pi-specific patch, just something Bookworm predates. The `/usr/share/
+  alsa` bind-mount in `deploy/raspberrypi/install.sh` was kept anyway (to
+  exactly match the host's patched build rather than trust a
+  near-identical but not-guaranteed-identical vanilla version) but is
+  likely redundant now that the base image matches. Worth remembering as
+  a pattern for future Pi-hardware-touching dependencies: check the
+  host's actual `/etc/apt/sources.list.d/*.list` and Debian codename
+  (`apt-cache policy <package>`) before assuming a container's package
+  *version* matches its base image's nominal Debian release -- Raspberry
+  Pi OS tracks newer Debian generations before they're broadly "stable,"
+  and a same-named package can differ by multiple minor versions across
+  that gap.
 - Hardware (LCD, 2x rotary encoders) is on order, not yet on the bench --
   `input_device.py`/`menu.py` still reflect the old discrete-menu keyboard
   mockup, not the radio-tuner model described above.
