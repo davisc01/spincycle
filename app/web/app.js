@@ -21,10 +21,6 @@
   const warmCacheBtn = document.getElementById("warm-cache-btn");
   const cacheLog = document.getElementById("cache-log");
   const playbackLog = document.getElementById("playback-log");
-  const cacheRootForm = document.getElementById("cache-root-form");
-  const cacheRootInput = document.getElementById("cache-root-input");
-  const cacheRootResult = document.getElementById("cache-root-result");
-  const cacheRootLockedNote = document.getElementById("cache-root-locked-note");
   const cacheWarning = document.getElementById("cache-warning");
 
   const infoPlaybackMode = document.getElementById("info-playback-mode");
@@ -172,7 +168,7 @@
     launchPlayerBtn.hidden = mode !== "web";
 
     if (status.cache_root_problem) {
-      cacheWarning.textContent = `Cache folder isn't set up (${status.cache_root_problem}). Tap here to fix it in Settings.`;
+      cacheWarning.textContent = `Cache folder isn't set up (${status.cache_root_problem}). See Deployment info in Settings for the configured path.`;
       cacheWarning.hidden = false;
     } else {
       cacheWarning.hidden = true;
@@ -341,9 +337,6 @@
   async function refreshCacheRoot() {
     const res = await fetch("/api/cache-root");
     const data = await res.json();
-    cacheRootInput.value = data.cache_root;
-    cacheRootForm.hidden = data.locked;
-    cacheRootLockedNote.hidden = !data.locked;
     infoPlaybackMode.textContent = data.playback_mode;
     infoCacheRoot.textContent = data.locked ? `${data.cache_root} (fixed by this deployment)` : data.cache_root;
   }
@@ -403,20 +396,6 @@
   warmCacheBtn.addEventListener("click", async () => {
     await fetch("/warm-cache", { method: "POST" });
     refreshWarmStatus();
-  });
-
-  cacheRootForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = await postJSON("/api/cache-root", { cache_root: cacheRootInput.value });
-    if (data.error) {
-      cacheRootResult.textContent = data.error;
-      cacheRootResult.style.color = "var(--danger)";
-    } else {
-      cacheRootInput.value = data.cache_root;
-      cacheRootResult.textContent = `Cache folder set to ${data.cache_root}`;
-      cacheRootResult.style.color = "";
-      fetchStatus();
-    }
   });
 
   // -- startup: detect console vs. web mode ------------------------------
