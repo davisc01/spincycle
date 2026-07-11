@@ -109,6 +109,20 @@ def _log_failure(label, url, err):
         f.write(line)
 
 
+def start_background_warm_cache():
+    """
+    Kick off a cache-warm run in the background if one isn't already in
+    progress. Safe to call repeatedly -- both the "Warm cache" button and
+    main.py's startup call go through this, and _run_warm_cache() itself
+    also no-ops under the lock if a run is already active, so a race
+    between the two just results in one run either way.
+    """
+    with _warm_lock:
+        already_running = _warm_state["running"]
+    if not already_running:
+        threading.Thread(target=_run_warm_cache, daemon=True).start()
+
+
 def _run_warm_cache():
     with _warm_lock:
         if _warm_state["running"]:
@@ -324,10 +338,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_html(200, message)
 
     def _handle_warm_cache(self):
-        with _warm_lock:
-            already_running = _warm_state["running"]
-        if not already_running:
-            threading.Thread(target=_run_warm_cache, daemon=True).start()
+        start_background_warm_cache()
 
         self.send_response(303)
         self.send_header("Location", "/")

@@ -37,6 +37,14 @@ def check_dependencies():
 
 def _start_library_server(controller):
     import library_server
+    # Fresh deploys (or a library.csv with newly-added URLs) start with a
+    # cold cache -- without this, the first genre/era pick after startup
+    # has to synchronously download+merge via yt-dlp before anything plays,
+    # which can look like playback is broken rather than just slow. This
+    # runs in its own background thread (see start_background_warm_cache)
+    # so it never delays the web remote or splash screen from coming up,
+    # and it's a no-op almost immediately for anything already cached.
+    library_server.start_background_warm_cache()
     try:
         library_server.run_server(controller=controller)
     except OSError as e:
@@ -61,7 +69,7 @@ def main():
     controller = JukeboxController()
 
     threading.Thread(target=_start_library_server, args=(controller,), daemon=True).start()
-    splash.show_startup(config.LIBRARY_SERVER_HOST, config.LIBRARY_SERVER_PORT, config.VIDEO_DIR)
+    splash.show_startup(config.LIBRARY_SERVER_PORT, config.VIDEO_DIR)
 
     try:
         threading.Event().wait()
