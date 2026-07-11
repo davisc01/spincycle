@@ -247,6 +247,112 @@ button:hover {
   display: none;
 }
 
+#session-picker {
+  max-width: 480px;
+  margin: 1.25rem auto;
+  padding: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.45);
+}
+
+@media (min-width: 640px) {
+  #session-picker {
+    max-width: 620px;
+    padding: 1.75rem;
+  }
+}
+
+#session-picker h2 {
+  margin-top: 0;
+}
+
+.section-hint {
+  opacity: 0.75;
+  font-size: 0.85rem;
+}
+
+#session-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: rgba(10, 8, 6, 0.35);
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.session-name {
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-weight: 600;
+}
+
+.session-meta {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.session-actions button {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.session-actions .close-session-btn {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+#back-to-sessions {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--fg);
+  opacity: 0.8;
+}
+
+#back-to-sessions[hidden] {
+  display: none;
+}
+
+#launch-player-btn {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+#launch-player-btn[hidden] {
+  display: none;
+}
+
 aside {
   border-top: 1px solid var(--border);
 }

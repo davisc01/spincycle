@@ -190,6 +190,59 @@ hand-tuning:
    `install.sh` to rebuild). Use `mpv --drm-connector=help` /
    `--drm-mode=help` on the Pi to see valid values for your hardware.
 
+## Setup on k3s (web deployment)
+
+Spin Cycle also runs as a web-only deployment -- no mpv, no physical
+console, no DRM/ALSA -- where a browser tab you launch from the web
+remote becomes the player instead. Same `app/` image as the Pi target,
+just a different `deploy/` sibling and one env var
+(`SPINCYCLE_PLAYBACK_MODE=web`) that swaps the mpv-on-console `Player` for
+a `BrowserPlayer` (see `player.py`/`config.py`). This is meant for a
+multi-viewer home cluster rather than a single physical device, so it adds
+**sessions**: each browser tab/device gets its own independent genre/era
+selection and player, named things like `clever-otter` (see `sessions.py`).
+The web remote's landing page becomes a session picker -- **+ New
+Session**, **Select** to open a session's genre/era/skip/stop controls
+plus a **Launch Player** button, **Close** to tear one down. Console mode
+is untouched by any of this -- it still boots straight into today's
+single-controller UI, no picker.
+
+Unlike the Pi target, this one's actual Kubernetes manifests and ArgoCD
+`Application` live in the separate `myhomelab` GitOps repo that manages
+this cluster (`k8s/base/spincycle/` + `k8s/apps/spincycle.yaml` there) --
+consistent with every other app on that cluster, and it means ArgoCD
+doesn't need a new cross-repo credential. This repo only builds and
+publishes the image:
+
+```
+git push                                # any push to app/** builds + pushes
+                                         # ghcr.io/davisc01/spincycle:latest via
+                                         # .github/workflows/build-k3s-image.yml
+kubectl rollout restart deployment/spincycle -n spincycle   # pick up a new image
+```
+
+See [`deploy/k3s/README.md`](deploy/k3s/README.md). A few differences from
+the Pi target worth knowing:
+
+- **No hardware decode constraint.** `config.FORMAT_SELECTOR` only forces
+  H.264/1080p in console mode, for the Pi's V4L2 decoder. Web mode decodes
+  client-side in the viewer's own browser, so it uses a much looser
+  selector (up to 4K, any codec) for noticeably better quality.
+- **Storage is two `local-path` PVCs**, not a bind-mounted USB drive: one
+  for the video cache, and a small one for `app/config` (`library.csv`/
+  `settings.json`) so a library uploaded through the web UI survives a
+  pod restart. `local-path` is this cluster's only StorageClass (k3s
+  built-in, node-local) -- fine here since the cluster is single-node.
+- **Single replica only.** Sessions live in the running pod's memory
+  (`SessionManager`), so a second replica would split traffic across two
+  independent, inconsistent session sets.
+- **No GPU use yet**, despite one being available on this cluster's node
+  (already used by Jellyfin there via a `/dev/dri` hostPath mount) --
+  documented as a follow-up: a one-time GPU-accelerated transcode step in
+  `video_cache.ensure_cached()` (AMD/VAAPI) could normalize whatever
+  codec/resolution YouTube served down to a consistent cached file,
+  independent of the format-selector change above.
+
 ### `/dev/tty1` and the console splash
 
 `main.py` prints a retro "Spin Cycle" splash and tries to write it
@@ -234,9 +287,14 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   runs. All paths below are relative to `app/` unless noted.
 - [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` (see "Setup
   on the Pi" above) plus its gitignored `data/` dir (fallback cache when
-  no `--cache-root` is given). A future deployment target (different
-  device, different install method) would be a new sibling under
-  `deploy/`, reusing `app/`'s image rather than forking the codebase.
+  no `--cache-root` is given).
+- [`deploy/k3s/`](deploy/k3s/) - just a README pointing at the GitHub
+  Actions workflow (`.github/workflows/build-k3s-image.yml`) that
+  publishes this target's image; the actual manifests live in the
+  `myhomelab` GitOps repo (see "Setup on k3s" above). Both `deploy/`
+  targets build and run the same `app/` image -- a future deployment
+  target would be a new sibling here too, rather than forking the
+  codebase.
 - `config.py` - paths, yt-dlp format string, mpv settings. Edit this first.
 - `config/library.csv` - your actual video library: artist, song, genre,
   era, url. Easiest file to hand-edit; open it in any text editor or
@@ -252,19 +310,34 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   skips/stops on a background thread as selections change. Logs each
   track play/skip/error to `config.PLAYBACK_LOG`. Intentionally decoupled
   from `input_device.py`'s `Event` model so a future GPIO dial input could
-  drive it too.
+  drive it too. Instance-scoped with no module-level globals, which is
+  what lets `sessions.py` run many of them concurrently in web mode.
+- `sessions.py` - `SessionManager`, web-mode only: owns one
+  `SpinCycleController` per session, keyed by a random adjective-animal
+  name (e.g. `clever-otter`) that doubles as its id. Not used in console
+  mode -- `main.py` wires up a single bare `SpinCycleController` there.
 - `library_server.py` - LAN-only web server for the whole web remote:
-  serves `web/index.html`/`style.css`/`app.js`, a JSON API
-  (`/api/status`, `/api/genre`, `/api/era`, `/api/skip`, `/api/stop`,
-  `/api/logs/...`) backed by a `SpinCycleController`, and the
+  serves `web/` (`index.html`/`style.css`/`app.js`/`player.html`/
+  `player.js`), a JSON API backed by either a single `SpinCycleController`
+  (console mode: `/api/status`, `/api/genre`, `/api/era`, `/api/skip`,
+  `/api/stop`) or a `SessionManager` (web mode:
+  `/api/sessions`, `/api/sessions/<name>/status`, `/api/sessions/<name>/
+  {genre,era,skip,stop,video-ended,close}`), a range-request-capable
+  `/video/<file>` route serving cached videos to browser players, and the
   library-management routes (`/upload`, `/library.csv` download,
   `/warm-cache`). `main.py` starts it automatically in a background
   thread; it's also runnable standalone (`python3 library_server.py`) for
   library maintenance without full playback (the controller-backed routes
   503 in that mode).
-- `web/` - the browser UI: `index.html`, `style.css`, `app.js` (vanilla
-  JS, no build step, polls `/api/status`).
-- `player.py` - mpv subprocess wrapper (play / skip).
+- `web/` - the browser UI: `index.html`/`style.css`/`app.js` (the remote --
+  vanilla JS, no build step, polls `/api/status` or, in web mode, the
+  session picker + `/api/sessions/...`), and `player.html`/`player.js` (the
+  web-mode browser player, opened via "Launch Player" -- polls a session's
+  `video_url` and plays it in a `<video>` tag).
+- `player.py` - `Player` (mpv subprocess wrapper: play / skip) and
+  `BrowserPlayer` (web mode: blocks until the browser player tab reports
+  the video ended or skip is pressed). `make_player()` picks between them
+  based on `config.PLAYBACK_MODE`.
 - `input_device.py` - input abstraction. `KeyboardInput`, built for a
   discrete menu model, not used by `main.py` -- see the Appendix.
 - `menu.py` - dev/testing-only terminal keyboard mockup, superseded by
@@ -273,13 +346,16 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   `SpinCycleController` and starts `library_server.py` in the background,
   then just waits (the web remote owns all interactivity).
 
-## Why H.264, not VP9/AV1
+## Why H.264, not VP9/AV1 (console mode only)
 
 The Pi 4's V4L2 M2M hardware decoder handles H.264 (and HEVC) but not
 VP9/AV1, which is what YouTube serves by default at higher resolutions.
-`config.FORMAT_SELECTOR` forces yt-dlp to grab the H.264 variant of each
-video so playback stays hardware-accelerated instead of falling back to
-slow software decode.
+In console mode, `config.FORMAT_SELECTOR` forces yt-dlp to grab the H.264
+variant of each video so playback stays hardware-accelerated instead of
+falling back to slow software decode. This constraint doesn't apply to
+the k3s/web deployment target -- there, decoding happens client-side in
+the viewer's own browser rather than on the server, so web mode uses a
+looser selector (up to 4K, any codec) instead. See "Setup on k3s" above.
 
 ## Appendix: 3D-printed case & physical controls
 

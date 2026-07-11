@@ -16,7 +16,15 @@
     <button id="settings-toggle" type="button" aria-expanded="false">Settings</button>
   </header>
 
-  <main id="remote">
+  <section id="session-picker" hidden>
+    <h2>Sessions</h2>
+    <p class="section-hint">Each session has its own genre/era and player -- create one per person/device, or jump back into one already running.</p>
+    <ul id="session-list"></ul>
+    <button id="new-session-btn" type="button">+ New Session</button>
+  </section>
+
+  <main id="remote" hidden>
+    <a id="back-to-sessions" href="/" hidden>&larr; Sessions</a>
     <button id="cache-warning" type="button" hidden></button>
 
     <div class="picker-row">
@@ -52,6 +60,8 @@
       <button id="skip-btn" type="button">Skip</button>
       <button id="stop-btn" type="button">Stop</button>
     </div>
+
+    <button id="launch-player-btn" type="button" hidden>Launch Player</button>
   </main>
 
   <aside id="settings" hidden>

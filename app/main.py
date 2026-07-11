@@ -22,7 +22,7 @@ import config
 
 def check_dependencies():
     problems = []
-    if shutil.which("mpv") is None:
+    if config.PLAYBACK_MODE == "console" and shutil.which("mpv") is None:
         problems.append("mpv is not installed (sudo apt install mpv)")
     try:
         import yt_dlp  # noqa: F401
@@ -35,7 +35,7 @@ def check_dependencies():
     return problems
 
 
-def _start_library_server(controller):
+def _start_library_server(controller=None, session_manager=None):
     import library_server
     # Fresh deploys (or a library.csv with newly-added URLs) start with a
     # cold cache -- without this, the first genre/era pick after startup
@@ -46,7 +46,7 @@ def _start_library_server(controller):
     # and it's a no-op almost immediately for anything already cached.
     library_server.start_background_warm_cache()
     try:
-        library_server.run_server(controller=controller)
+        library_server.run_server(controller=controller, session_manager=session_manager)
     except OSError as e:
         print(f"[library_server] Could not start web remote: {e}")
 
@@ -64,11 +64,16 @@ def main():
         print(f"[spincycle] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
         print("[spincycle] Starting anyway -- set a working path from the web remote's Settings panel.")
 
-    from controller import SpinCycleController
     import splash
-    controller = SpinCycleController()
 
-    threading.Thread(target=_start_library_server, args=(controller,), daemon=True).start()
+    if config.PLAYBACK_MODE == "web":
+        from sessions import SessionManager
+        kwargs = {"session_manager": SessionManager()}
+    else:
+        from controller import SpinCycleController
+        kwargs = {"controller": SpinCycleController()}
+
+    threading.Thread(target=_start_library_server, kwargs=kwargs, daemon=True).start()
     splash.show_startup(config.LIBRARY_SERVER_PORT, config.VIDEO_DIR)
 
     try:

@@ -48,6 +48,8 @@ _STATIC_FILES = {
     "/": (os.path.join(_WEB_DIR, "index.html"), "text/html; charset=utf-8"),
     "/style.css": (os.path.join(_WEB_DIR, "style.css"), "text/css; charset=utf-8"),
     "/app.js": (os.path.join(_WEB_DIR, "app.js"), "application/javascript; charset=utf-8"),
+    "/player": (os.path.join(_WEB_DIR, "player.html"), "text/html; charset=utf-8"),
+    "/player.js": (os.path.join(_WEB_DIR, "player.js"), "application/javascript; charset=utf-8"),
     "/images/spin_cycle_logo_full.png": (os.path.join(_IMAGES_DIR, "spin_cycle_logo_full.png"), "image/png"),
     "/images/spin_cycle_icon_128.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_128.png"), "image/png"),
     "/images/spin_cycle_icon_256.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_256.png"), "image/png"),
@@ -159,6 +161,10 @@ class Handler(BaseHTTPRequestHandler):
     def controller(self):
         return getattr(self.server, "controller", None)
 
+    @property
+    def session_manager(self):
+        return getattr(self.server, "session_manager", None)
+
     def _send_html(self, status, body):
         self._send_bytes(status, body.encode("utf-8"), "text/html; charset=utf-8")
 
@@ -184,8 +190,23 @@ class Handler(BaseHTTPRequestHandler):
     # -- routing ---------------------------------------------------------
 
     def do_GET(self):
+        route = self._session_route()
+        if route is not None:
+            name, action = route
+            if name is None:
+                if self._require_session_manager():
+                    self._send_json(200, self._sessions_status_list())
+                return
+            if action == "status":
+                self._handle_session_status(name)
+                return
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+
         if self.path in _STATIC_FILES:
             self._serve_static(self.path)
+        elif self.path.startswith("/video/"):
+            self._serve_video(self.path[len("/video/"):])
         elif self.path == "/library.csv":
             self._handle_download_csv()
         elif self.path == "/api/status":
@@ -206,6 +227,19 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(404, "<h1>Not found</h1>")
 
     def do_POST(self):
+        route = self._session_route()
+        if route is not None:
+            name, action = route
+            if name is None:
+                if self._require_session_manager():
+                    self._handle_session_create()
+                return
+            if action in ("genre", "era", "skip", "stop", "video-ended", "close"):
+                self._handle_session_action(name, action)
+                return
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+
         if self.path == "/upload":
             self._handle_upload()
         elif self.path == "/warm-cache":
@@ -229,6 +263,77 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _require_session_manager(self):
+        if self.session_manager is None:
+            self._send_json(503, {"error": "no session manager running"})
+            return False
+        return True
+
+    # -- sessions (web-mode multi-session support) ------------------------
+
+    def _session_route(self):
+        """Parse /api/sessions[/<name>/<action>] into (name, action), or
+        (None, None) for the bare /api/sessions collection route. Returns
+        None if this path isn't a sessions route at all, so callers fall
+        through to the rest of do_GET/do_POST unchanged."""
+        parts = self.path.strip("/").split("/")
+        if parts == ["api", "sessions"]:
+            return (None, None)
+        if len(parts) == 4 and parts[0] == "api" and parts[1] == "sessions":
+            return (parts[2], parts[3])
+        return None
+
+    def _sessions_status_list(self):
+        return [{"name": name, **controller.status()} for name, controller in self.session_manager.list()]
+
+    def _handle_session_status(self, name):
+        if not self._require_session_manager():
+            return
+        controller = self.session_manager.get(name)
+        if controller is None:
+            self._send_json(404, {"error": f"no such session: {name}"})
+            return
+        self._send_json(200, {"name": name, **controller.status()})
+
+    def _handle_session_create(self):
+        name, controller = self.session_manager.create()
+        self._send_json(200, {"name": name, **controller.status()})
+
+    def _handle_session_action(self, name, action):
+        if not self._require_session_manager():
+            return
+        if action == "close":
+            if self.session_manager.get(name) is None:
+                self._send_json(404, {"error": f"no such session: {name}"})
+                return
+            self.session_manager.close(name)
+            self._send_json(200, {"closed": name})
+            return
+
+        controller = self.session_manager.get(name)
+        if controller is None:
+            self._send_json(404, {"error": f"no such session: {name}"})
+            return
+
+        if action in ("genre", "era"):
+            try:
+                payload = self._read_json_body()
+            except (ValueError, UnicodeDecodeError) as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            if action == "genre":
+                controller.set_genre(payload.get("genre"))
+            else:
+                controller.set_era(payload.get("era"))
+        elif action == "skip":
+            controller.skip()
+        elif action == "stop":
+            controller.stop()
+        elif action == "video-ended":
+            controller.player.mark_ended()
+
+        self._send_json(200, {"name": name, **controller.status()})
+
     def _handle_transport(self, action):
         if not self._require_controller():
             return
@@ -246,6 +351,69 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(404, "<h1>Not found</h1>")
             return
         self._send_bytes(200, body, content_type)
+
+    # -- video streaming (web-mode browser player) ------------------------
+
+    _CHUNK_SIZE = 1024 * 1024
+
+    def _serve_video(self, filename):
+        """Serve a cached video file from config.VIDEO_DIR by its flat
+        <id>.mp4 filename (see video_cache.py -- no subdirectories, so
+        rejecting any '/' or '..' is enough to keep this inside
+        VIDEO_DIR). Unlike _serve_static's _send_bytes (which reads the
+        whole file into memory -- fine for style.css, wrong for a
+        multi-hundred-MB video), this streams in chunks and supports HTTP
+        Range requests, which browsers commonly need for <video> seeking."""
+        if not filename or "/" in filename or ".." in filename or filename != os.path.basename(filename):
+            self._send_html(400, "<h1>Invalid filename</h1>")
+            return
+        file_path = os.path.join(config.VIDEO_DIR, filename)
+        real_dir = os.path.realpath(config.VIDEO_DIR)
+        real_path = os.path.realpath(file_path)
+        if not real_path.startswith(real_dir + os.sep):
+            self._send_html(400, "<h1>Invalid filename</h1>")
+            return
+        try:
+            size = os.path.getsize(real_path)
+        except OSError:
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+        self._send_file_range(real_path, size, "video/mp4")
+
+    def _send_file_range(self, path, file_size, content_type):
+        start, end, status = 0, file_size - 1, 200
+        rng = self.headers.get("Range")
+        if rng and rng.startswith("bytes="):
+            try:
+                range_spec = rng[len("bytes="):]
+                start_str, end_str = range_spec.split("-", 1)
+                start = int(start_str) if start_str else 0
+                end = min(int(end_str), file_size - 1) if end_str else file_size - 1
+                status = 206
+            except ValueError:
+                start, end, status = 0, file_size - 1, 200
+
+        length = end - start + 1
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(length))
+        if status == 206:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        self.end_headers()
+
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(self._CHUNK_SIZE, remaining))
+                if not chunk:
+                    break
+                try:
+                    self.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    return  # client closed the connection (tab closed, seeked away) -- not an error
+                remaining -= len(chunk)
 
     def _library_status(self):
         if not os.path.exists(config.LIBRARY_FILE):
@@ -351,7 +519,7 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[library_server] {self.address_string()} - {fmt % args}")
 
 
-def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT, controller=None):
+def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT, controller=None, session_manager=None):
     """Bind and serve forever. Raises OSError if the port can't be bound
     (e.g. permission denied on a privileged port, or already in use) --
     callers that don't want that to be fatal (main.py running this in a
@@ -360,7 +528,9 @@ def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT,
     `controller`, if given, is a SpinCycleController used to serve the
     genre/era/skip/stop API routes; without one those routes reply 503
     (library management routes -- upload, warm-cache, download -- work
-    either way).
+    either way). `session_manager`, if given, is a SessionManager (web
+    mode only) serving the /api/sessions family of routes instead --
+    main.py passes exactly one of the two, never both.
 
     A bad CACHE_ROOT (missing drive, permission denied) is deliberately
     *not* fatal here -- it's only fixable from this same web page's
@@ -371,6 +541,7 @@ def run_server(host=config.LIBRARY_SERVER_HOST, port=config.LIBRARY_SERVER_PORT,
         print(f"[library_server] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
     server = ThreadingHTTPServer((host, port), Handler)
     server.controller = controller
+    server.session_manager = session_manager
     print(f"Serving on http://{host}:{port} (Ctrl+C to stop)")
     server.serve_forever()
 
