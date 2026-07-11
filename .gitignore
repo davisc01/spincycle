@@ -20,7 +20,6 @@ cache/
 *.mp4
 *.mkv
 index.json
-yt-dlp-archive.txt
 
 # Per-device runtime settings (e.g. the cache root path set via the web UI)
 app/config/settings.json
