@@ -1,30 +1,22 @@
 # Music Video Jukebox
 
-A Raspberry Pi 4 powered music video jukebox, built into a 3D-printed case
-styled like an old car stereo: two rotary dials up front (genre on the
-left, era on the right) and a horizontal LCD in the middle. Turn the dials
-like tuning a radio -- stop turning, and it starts loading and playing a
-shuffled, continuously-looping set of music videos on the connected TV
-over HDMI (once every track's played, it reshuffles and keeps going).
-Videos are
-sourced from YouTube via yt-dlp and lazily cached to local storage so
-playback never depends on the network once a video's been played once.
+A music video jukebox for a Raspberry Pi 4, controlled from a web app in
+your browser -- desktop or mobile, no app install needed. Pick a genre and
+an era and it starts playing a shuffled, continuously-looping set of music
+videos on the connected TV over HDMI (once every track's played, it
+reshuffles and keeps going). Videos are sourced from YouTube via yt-dlp
+and lazily cached to local storage so playback never depends on the
+network once a video's been played once.
 
-**Status:** software (caching, playback, library) works today via a
-browser-based web remote (genre/era selectors, skip/stop, settings).
-Physical hardware (LCD, rotary encoders) is on order -- see "Controls"
-below for what exists now vs. what's coming.
+**Status:** software (caching, playback, library, web remote) works
+today. A 3D-printed case with physical rotary dials and an LCD was the
+original plan for this project and may still happen -- see the
+[Appendix](#appendix-3d-printed-case--physical-controls) for that.
 
 ## Hardware
 
 - Raspberry Pi 4 (any RAM size), HDMI to TV
 - External USB 3 SSD for the video cache (don't use the SD card for this)
-- 16x2 I2C LCD (HD44780 controller + PCF8574 backpack) -- top row shows the
-  live genre/era selection, bottom row shows status/errors
-- 2x bare-shaft EC11 rotary encoders (5-pin: CLK, DT, SW, +, GND),
-  panel-mounted through the case front -- left dial = genre, right dial = era
-- Breadboard + jumper wires for prototyping; perfboard + headers for the
-  final solder-down once the wiring's proven out
 
 ## Setup on the Pi (Raspberry Pi OS 64-bit)
 
@@ -54,10 +46,9 @@ cd jukebox/deploy/raspberrypi
 - installs and enables a systemd service (`jukebox.service`, generated via
   `podman generate systemd`) that runs the jukebox as a **privileged**
   container -- broad host device access (GPU/DRM, V4L2 hardware decode,
-  ALSA, the physical console, and later GPIO/I2C once the rotary
-  encoders/LCD land) in exchange for not having to hand-enumerate exact
-  device nodes. Consistent with the trust level already implied by the
-  web remote having no authentication -- this is a single-purpose LAN
+  ALSA, the physical console) in exchange for not having to hand-enumerate
+  exact device nodes. Consistent with the trust level already implied by
+  the web remote having no authentication -- this is a single-purpose LAN
   appliance, not a multi-tenant server.
 - also bind-mounts the host's `/usr/share/alsa` into the container
   read-only. Device *node* access (`/dev/snd`) isn't enough on its own --
@@ -148,13 +139,6 @@ rather than anything `install.sh` can decide for you:
    this remotely, with a live progress line and a scrollable log of
    anything that failed to download.
 
-Open `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on
-your laptop or phone: pick a genre and an era and playback starts
-automatically (re-picking either one re-tunes: stops the current video and
-starts the new combination), Skip/Stop control the current track, and the
-Settings button opens the library upload/download, cache-warm, and log
-panels from steps above.
-
 ### Customizing the HDMI resolution / connector
 
 `install.sh` defaults to forcing 720p on `HDMI-A-1` (auto-detecting a
@@ -217,69 +201,27 @@ sidesteps this entirely: `jukebox.service` runs the container as a
 privileged root process, which can open `/dev/tty1` directly, no
 `TTYPath=` dance needed the way a bare host process would.
 
-## Controls
+## Using the web remote
 
-### Today: web remote
+Open `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on
+your laptop or phone -- it works the same on desktop and mobile, no app
+install needed. `main.py` starts a `JukeboxController` and drives it from
+this browser-based remote: a genre `<select>`, an era `<select>`, and
+Skip/Stop buttons.
 
-Until the rotary encoders and LCD are wired up, `main.py` starts a
-`JukeboxController` and drives it from the browser-based web remote
-(`http://<pi-ip>/`, see "Setup on the Pi" above): a genre `<select>`, an era
-`<select>`, and Skip/Stop buttons. Picking a genre and an era starts
-playback automatically -- no separate confirm step, since picking from a
-dropdown is already a deliberate action. Changing either selection
-mid-playback re-tunes: stops the current video and starts the new
-combination. Skip moves to the next track without changing the selection;
-Stop halts playback and returns to browsing. A Settings button opens the
-library upload/download, cache-warm trigger, and cache/playback log panels.
-
-There's also a terminal keyboard mockup (`menu.py` + `input_device.py`)
-left over from before the web remote existed, with a browse-a-list-then-
-confirm menu:
-
-| Key            | Action                        |
-|----------------|--------------------------------|
-| w / Up arrow   | Rotate one direction (move up)  |
-| s / Down arrow | Rotate other direction (move down) |
-| Enter / Space  | Push the selector button (confirm) |
-| k              | Press the skip button (next track) |
-| q              | Back out of a menu / stop playback and return to menu |
-
-It's dev/testing-only now -- run it directly with `python3 menu.py` from a
-local Python environment with `requirements.txt` installed and `mpv` on
-your `PATH` (not something `deploy/raspberrypi/install.sh` sets up, since
-the container is the production path); `main.py` no longer starts it,
-since running it alongside the web remote would mean two independent mpv
-processes fighting over the same screen and speaker.
+Picking a genre and an era starts playback automatically -- no separate
+confirm step, since picking from a dropdown is already a deliberate
+action. Changing either selection mid-playback re-tunes: stops the
+current video and starts the new combination. Skip moves to the next
+track without changing the selection; Stop halts playback and returns to
+browsing. A Settings button opens the library upload/download, cache-warm
+trigger, and cache/playback log panels covered in "Setup on the Pi" above.
 
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
 half of the match -- e.g. genre `Rock` + era `Anytime` plays all Rock
 regardless of era; `Anything` + a specific era plays that era across every
 genre; `Anything` + `Anytime` shuffles the entire library.
-
-### Coming: radio-tuner model (real hardware)
-
-Once the dials and LCD are installed, the interaction changes from a menu
-tree to something closer to tuning an old car radio:
-
-- Turning the **genre dial** (left) live-updates the genre shown on the
-  LCD. Turning the **era dial** (right) live-updates the era. No
-  confirmation press needed for either.
-- Once both dials have been still for about a second, that combination is
-  considered selected and the jukebox automatically starts caching and
-  playing a shuffled set -- the LCD's bottom row shows "loading..." then
-  the current track.
-- Turning either dial again -- even mid-playback -- stops the current
-  video and drops back into live browsing, like re-tuning a station.
-- **Genre dial's push-button** = skip the current track.
-- **Era dial's push-button** = stop playback and return to browsing.
-- Each dial has one extra detent past its real values -- "Anything" on the
-  genre dial, "Anytime" on the era dial -- for playing across whichever
-  half you leave wide open (see "Anything"/"Anytime" above).
-
-This means the dials' built-in push-buttons are *not* used to confirm a
-genre/era pick -- only for skip and stop, since selection happens
-automatically once you stop turning.
 
 ## Project layout
 
@@ -319,16 +261,85 @@ automatically once you stop turning.
 - `web/` - the browser UI: `index.html`, `style.css`, `app.js` (vanilla
   JS, no build step, polls `/api/status`).
 - `player.py` - mpv subprocess wrapper (play / skip).
-- `input_device.py` - input abstraction. `KeyboardInput`, built for the
-  discrete menu model in `menu.py`. Not used by `main.py` -- see below.
-- `menu.py` - dev/testing-only terminal keyboard mockup (Genre -> Era ->
-  shuffled playback), superseded by the web remote. Run it directly
-  (`python3 menu.py`) if you want it; `main.py` doesn't start it.
+- `input_device.py` - input abstraction. `KeyboardInput`, built for a
+  discrete menu model, not used by `main.py` -- see the Appendix.
+- `menu.py` - dev/testing-only terminal keyboard mockup, superseded by
+  the web remote -- see the Appendix.
 - `main.py` - entry point, dependency check, creates the
   `JukeboxController` and starts `library_server.py` in the background,
   then just waits (the web remote owns all interactivity).
 
-## Moving to the rotary encoders and LCD
+## Why H.264, not VP9/AV1
+
+The Pi 4's V4L2 M2M hardware decoder handles H.264 (and HEVC) but not
+VP9/AV1, which is what YouTube serves by default at higher resolutions.
+`config.FORMAT_SELECTOR` forces yt-dlp to grab the H.264 variant of each
+video so playback stays hardware-accelerated instead of falling back to
+slow software decode.
+
+## Appendix: 3D-printed case & physical controls
+
+The original plan for this project was a 3D-printed case styled like an
+old car stereo, with two rotary dials up front (genre on the left, era on
+the right) and a horizontal 16x2 LCD in the middle -- turn the dials like
+tuning a radio, stop turning, and it starts playing. The web remote above
+turned out to be a much better interface (works from any phone/laptop
+already on the LAN, no soldering required), so the physical build is on
+hold, not gone. This section captures the design so it doesn't get lost.
+
+### Hardware (on order, not yet on the bench)
+
+- 16x2 I2C LCD (HD44780 controller + PCF8574 backpack) -- top row shows
+  the live genre/era selection, bottom row shows status/errors
+- 2x bare-shaft EC11 rotary encoders (5-pin: CLK, DT, SW, +, GND),
+  panel-mounted through the case front -- left dial = genre, right dial =
+  era
+- Breadboard + jumper wires for prototyping; perfboard + headers for the
+  final solder-down once the wiring's proven out
+
+### Radio-tuner interaction model
+
+- Turning the **genre dial** (left) live-updates the genre shown on the
+  LCD. Turning the **era dial** (right) live-updates the era. No
+  confirmation press needed for either.
+- Once both dials have been still for about a second, that combination is
+  considered selected and the jukebox automatically starts caching and
+  playing a shuffled set -- the LCD's bottom row shows "loading..." then
+  the current track.
+- Turning either dial again -- even mid-playback -- stops the current
+  video and drops back into live browsing, like re-tuning a station.
+- **Genre dial's push-button** = skip the current track.
+- **Era dial's push-button** = stop playback and return to browsing.
+- Each dial has one extra detent past its real values -- "Anything" on the
+  genre dial, "Anytime" on the era dial -- for playing across whichever
+  half you leave wide open, same as the web remote's wildcard options.
+
+This means the dials' built-in push-buttons are *not* used to confirm a
+genre/era pick -- only for skip and stop, since selection happens
+automatically once you stop turning.
+
+### Current dev stand-in: terminal keyboard mockup
+
+`menu.py` + `input_device.py` are a terminal keyboard mockup of a discrete
+browse-a-list-then-confirm menu, left over from before the web remote
+existed:
+
+| Key            | Action                        |
+|----------------|--------------------------------|
+| w / Up arrow   | Rotate one direction (move up)  |
+| s / Down arrow | Rotate other direction (move down) |
+| Enter / Space  | Push the selector button (confirm) |
+| k              | Press the skip button (next track) |
+| q              | Back out of a menu / stop playback and return to menu |
+
+It's dev/testing-only -- run it directly with `python3 menu.py` from a
+local Python environment with `requirements.txt` installed and `mpv` on
+your `PATH` (not something `deploy/raspberrypi/install.sh` sets up, since
+the container is the production path); `main.py` no longer starts it,
+since running it alongside the web remote would mean two independent mpv
+processes fighting over the same screen and speaker.
+
+### Moving to the rotary encoders and LCD
 
 The current `menu.py`/`input_device.py` pair is built around a
 press-to-confirm menu tree (`NEXT`/`PREV`/`SELECT`/`SKIP`/`QUIT` events),
@@ -345,11 +356,3 @@ onto the old event model, both files get rewritten together around:
 
 `player.py` and `video_cache.py` stay as-is -- this rework is scoped to
 the input/menu layer only.
-
-## Why H.264, not VP9/AV1
-
-The Pi 4's V4L2 M2M hardware decoder handles H.264 (and HEVC) but not
-VP9/AV1, which is what YouTube serves by default at higher resolutions.
-`config.FORMAT_SELECTOR` forces yt-dlp to grab the H.264 variant of each
-video so playback stays hardware-accelerated instead of falling back to
-slow software decode.
