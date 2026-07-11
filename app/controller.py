@@ -10,6 +10,7 @@ CLAUDE.md's "Interaction model" section, just without the settle timer
 still-spinning dial). A future GPIO dial input could drive this same
 controller instead of menu.py's KeyboardInput/Event model.
 """
+import os
 import random
 import threading
 from datetime import datetime
@@ -17,7 +18,7 @@ from datetime import datetime
 import config
 import library
 import video_cache
-from player import Player
+from player import make_player
 
 
 def _log_playback(line):
@@ -34,13 +35,14 @@ def _log_playback(line):
 class SpinCycleController:
     def __init__(self):
         self.library = library.load_library(config.LIBRARY_FILE)
-        self.player = Player()
+        self.player = make_player()
 
         self._lock = threading.Lock()
         self._genre = None
         self._era = None
         self._playing = False
         self._current_track = None
+        self._current_video_path = None
         self._status_message = "Select a genre and era to start playing."
 
         self._generation = 0
@@ -113,6 +115,7 @@ class SpinCycleController:
         self._play_thread = None
         self._playing = False
         self._current_track = None
+        self._current_video_path = None
         if thread is not None and thread.is_alive():
             self.player.skip()
             # Release the lock while joining so the play loop (which takes
@@ -136,6 +139,8 @@ class SpinCycleController:
                 "era_options": era_options,
                 "playing": self._playing,
                 "current_track": self._current_track,
+                "video_url": f"/video/{os.path.basename(self._current_video_path)}" if self._current_video_path else None,
+                "playback_mode": config.PLAYBACK_MODE,
                 "status_message": self._status_message,
                 "cache_root_problem": config.cache_root_problem(),
             }
@@ -175,6 +180,7 @@ class SpinCycleController:
                     if not self._is_current_locked(generation):
                         return
                     self._current_track = label
+                    self._current_video_path = local_path
                     self._status_message = f"Now playing: {label}"
                 _log_playback(f"PLAY  {genre} / {era}  {label}")
 

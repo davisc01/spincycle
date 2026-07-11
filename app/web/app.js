@@ -4,6 +4,13 @@
   const statusMessage = document.getElementById("status-message");
   const skipBtn = document.getElementById("skip-btn");
   const stopBtn = document.getElementById("stop-btn");
+  const launchPlayerBtn = document.getElementById("launch-player-btn");
+  const backToSessions = document.getElementById("back-to-sessions");
+
+  const sessionPicker = document.getElementById("session-picker");
+  const sessionList = document.getElementById("session-list");
+  const newSessionBtn = document.getElementById("new-session-btn");
+  const remote = document.getElementById("remote");
 
   const settingsToggle = document.getElementById("settings-toggle");
   const settingsPanel = document.getElementById("settings");
@@ -20,6 +27,26 @@
   const cacheWarning = document.getElementById("cache-warning");
 
   let warmPollTimer = null;
+
+  // -- session-aware routing --------------------------------------------
+  //
+  // Console mode (the Pi target): a single SpinCycleController, no
+  // sessions -- the flat /api/<action> routes from before. Web mode (k3s
+  // target): one SessionManager holding many independent
+  // SpinCycleControllers, so every playback route is scoped under
+  // /api/sessions/<name>/<action> instead. See sessions.py/CLAUDE.md.
+  // mode/session are set once by init() below and read by actionUrl().
+
+  let mode = null; // "console" | "web"
+  let session = null; // current session name, web mode only
+  let statusPollTimer = null;
+
+  function actionUrl(action) {
+    if (mode === "web") {
+      return `/api/sessions/${encodeURIComponent(session)}/${action}`;
+    }
+    return `/api/${action}`;
+  }
 
   function fillOptions(select, options, selected) {
     const placeholder = select === genreSelect ? "-- pick a genre --" : "-- pick an era --";
@@ -137,6 +164,7 @@
     statusMessage.classList.toggle("playing", status.playing);
     stopBtn.disabled = !status.playing;
     skipBtn.disabled = !status.playing;
+    launchPlayerBtn.hidden = mode !== "web";
 
     if (status.cache_root_problem) {
       cacheWarning.textContent = `Cache folder isn't set up (${status.cache_root_problem}). Tap here to fix it in Settings.`;
@@ -147,7 +175,15 @@
   }
 
   async function fetchStatus() {
-    const res = await fetch("/api/status");
+    const res = await fetch(actionUrl("status"));
+    if (!res.ok) {
+      if (mode === "web") {
+        // Session probably got closed (e.g. from another tab) -- bounce
+        // back to the picker rather than polling a dead session forever.
+        showSessionPicker();
+      }
+      return null;
+    }
     const status = await res.json();
     renderStatus(status);
     return status;
@@ -163,24 +199,116 @@
   }
 
   genreSelect.addEventListener("change", async () => {
-    const status = await postJSON("/api/genre", { genre: genreSelect.value || null });
+    const status = await postJSON(actionUrl("genre"), { genre: genreSelect.value || null });
     renderStatus(status);
   });
 
   eraSelect.addEventListener("change", async () => {
-    const status = await postJSON("/api/era", { era: eraSelect.value || null });
+    const status = await postJSON(actionUrl("era"), { era: eraSelect.value || null });
     renderStatus(status);
   });
 
   skipBtn.addEventListener("click", async () => {
-    const status = await postJSON("/api/skip");
+    const status = await postJSON(actionUrl("skip"));
     renderStatus(status);
   });
 
   stopBtn.addEventListener("click", async () => {
-    const status = await postJSON("/api/stop");
+    const status = await postJSON(actionUrl("stop"));
     renderStatus(status);
   });
+
+  launchPlayerBtn.addEventListener("click", () => {
+    window.open(`/player?session=${encodeURIComponent(session)}`, "_blank");
+  });
+
+  backToSessions.addEventListener("click", (event) => {
+    event.preventDefault();
+    showSessionPicker();
+  });
+
+  // -- session picker (web mode only) ------------------------------------
+
+  function renderSessionList(sessions) {
+    sessionList.innerHTML = "";
+    for (const s of sessions) {
+      const li = document.createElement("li");
+      li.className = "session-item";
+
+      const info = document.createElement("div");
+      info.className = "session-info";
+      const name = document.createElement("span");
+      name.className = "session-name";
+      name.textContent = s.name;
+      const meta = document.createElement("span");
+      meta.className = "session-meta";
+      meta.textContent = s.playing
+        ? s.status_message
+        : s.genre || s.era
+        ? `${s.genre || "Anything"} / ${s.era || "Anytime"}`
+        : "idle";
+      info.append(name, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "session-actions";
+      const selectBtn = document.createElement("button");
+      selectBtn.type = "button";
+      selectBtn.textContent = "Select";
+      selectBtn.addEventListener("click", () => selectSession(s.name));
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "close-session-btn";
+      closeBtn.textContent = "Close";
+      closeBtn.addEventListener("click", () => closeSession(s.name));
+      actions.append(selectBtn, closeBtn);
+
+      li.append(info, actions);
+      sessionList.appendChild(li);
+    }
+  }
+
+  async function refreshSessionList() {
+    const res = await fetch("/api/sessions");
+    const sessions = await res.json();
+    renderSessionList(sessions);
+  }
+
+  newSessionBtn.addEventListener("click", async () => {
+    const created = await postJSON("/api/sessions");
+    selectSession(created.name);
+  });
+
+  function showSessionPicker() {
+    session = null;
+    if (statusPollTimer) {
+      clearInterval(statusPollTimer);
+      statusPollTimer = null;
+    }
+    remote.hidden = true;
+    sessionPicker.hidden = false;
+    history.pushState(null, "", "/");
+    refreshSessionList();
+  }
+
+  function selectSession(name) {
+    session = name;
+    sessionPicker.hidden = true;
+    remote.hidden = false;
+    backToSessions.hidden = false;
+    history.pushState(null, "", `/?session=${encodeURIComponent(name)}`);
+    fetchStatus();
+    if (statusPollTimer) clearInterval(statusPollTimer);
+    statusPollTimer = setInterval(fetchStatus, 2000);
+  }
+
+  async function closeSession(name) {
+    await postJSON(`/api/sessions/${encodeURIComponent(name)}/close`);
+    if (session === name) {
+      showSessionPicker();
+    } else {
+      refreshSessionList();
+    }
+  }
 
   // -- settings panel ------------------------------------------------
 
@@ -281,8 +409,34 @@
     }
   });
 
-  // -- polling ---------------------------------------------------------
+  // -- startup: detect console vs. web mode ------------------------------
+  //
+  // /api/sessions 503s in console mode (no SessionManager running there,
+  // see library_server.py's _require_session_manager) -- that's the cheap
+  // way to tell which UI to show without a dedicated /api/config route.
 
-  fetchStatus();
-  setInterval(fetchStatus, 2000);
+  async function init() {
+    const probe = await fetch("/api/sessions");
+    if (probe.status === 503) {
+      mode = "console";
+      backToSessions.hidden = true;
+      remote.hidden = false;
+      fetchStatus();
+      statusPollTimer = setInterval(fetchStatus, 2000);
+      return;
+    }
+
+    mode = "web";
+    const wanted = new URLSearchParams(location.search).get("session");
+    if (wanted) {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(wanted)}/status`);
+      if (res.ok) {
+        selectSession(wanted);
+        return;
+      }
+    }
+    showSessionPicker();
+  }
+
+  init();
 })();

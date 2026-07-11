@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spin Cycle Player</title>
+  <link rel="icon" type="image/png" sizes="128x128" href="/images/spin_cycle_icon_128.png">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    #v {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    #overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0.75rem 1rem;
+      font: 14px system-ui, -apple-system, sans-serif;
+      color: #39ff8a;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <video id="v" playsinline controls></video>
+  <div id="overlay"></div>
+  <script src="/player.js"></script>
+</body>
+</html>

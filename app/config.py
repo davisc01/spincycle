@@ -100,14 +100,33 @@ def set_cache_root(path):
 
 LIBRARY_FILE = os.path.join(os.path.dirname(__file__), "config", "library.csv")
 
+# --- Playback mode ---------------------------------------------------------
+# "console" (default): mpv renders to the physical console via DRM/KMS, as
+# on the Pi. "web": a browser tab is the player instead -- see player.py's
+# BrowserPlayer and sessions.py. Read once from env at startup, unlike
+# CACHE_ROOT -- this isn't meant to be flipped at runtime from Settings.
+PLAYBACK_MODE = os.environ.get("SPINCYCLE_PLAYBACK_MODE", "console")
+if PLAYBACK_MODE not in ("console", "web"):
+    raise ValueError(f"SPINCYCLE_PLAYBACK_MODE must be 'console' or 'web', got {PLAYBACK_MODE!r}")
+
 # --- yt-dlp format selection --------------------------------------------
-# Force H.264 video (avc1) so the Pi 4's V4L2 hardware decoder can handle it.
-# Falls back gracefully if a video genuinely has no H.264 variant available.
-FORMAT_SELECTOR = (
+# Console mode forces H.264 (avc1) at <=1080p so the Pi 4's V4L2 hardware
+# decoder can handle it -- falls back gracefully if a video genuinely has
+# no H.264 variant available. That constraint doesn't apply to web mode:
+# decoding happens client-side in the viewer's own browser, not on the
+# server, and modern browsers handle VP9/AV1 and much higher resolutions
+# natively -- so web mode gets noticeably better quality for free.
+_CONSOLE_FORMAT_SELECTOR = (
     "bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/"
     "best[vcodec^=avc1][height<=1080]/"
     "best[height<=1080]"
 )
+_WEB_FORMAT_SELECTOR = (
+    "bestvideo[height<=2160]+bestaudio/"
+    "best[height<=2160]/"
+    "best"
+)
+FORMAT_SELECTOR = _CONSOLE_FORMAT_SELECTOR if PLAYBACK_MODE == "console" else _WEB_FORMAT_SELECTOR
 
 # --- Playback ------------------------------------------------------------
 MPV_HWDEC = "v4l2m2m"   # hardware decode mode for Pi 4 (V4L2 M2M)
