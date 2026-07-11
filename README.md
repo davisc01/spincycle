@@ -1,7 +1,11 @@
-# Music Video Jukebox
+<p align="center">
+  <img src="app/images/spin_cycle_logo_full.png" alt="Spin Cycle logo" width="480">
+</p>
 
-A music video jukebox for a Raspberry Pi 4, controlled from a web app in
-your browser -- desktop or mobile, no app install needed. Pick a genre and
+# Spin Cycle
+
+Spin Cycle is a music video jukebox for a Raspberry Pi 4, controlled from a
+web app in your browser -- desktop or mobile, no app install needed. Pick a genre and
 an era and it starts playing a shuffled, continuously-looping set of music
 videos on the connected TV over HDMI (once every track's played, it
 reshuffles and keeps going). Videos are sourced from YouTube via yt-dlp
@@ -20,7 +24,7 @@ original plan for this project and may still happen -- see the
 
 ## Setup on the Pi (Raspberry Pi OS 64-bit)
 
-The jukebox app itself lives in [`app/`](app/): a device-agnostic
+The Spin Cycle app itself lives in [`app/`](app/): a device-agnostic
 codebase with a `Dockerfile`, no assumptions baked in about which machine
 it runs on. Per-target install scripts live under `deploy/` -- today
 that's [`deploy/raspberrypi/`](deploy/raspberrypi/); a different device or
@@ -29,8 +33,8 @@ same `app/` image rather than a fork of the codebase. Clone the repo
 anywhere your user can write -- no fixed install path required:
 
 ```
-git clone <repo-url> jukebox
-cd jukebox/deploy/raspberrypi
+git clone <repo-url> spincycle
+cd spincycle/deploy/raspberrypi
 ./install.sh
 ```
 
@@ -42,9 +46,9 @@ cd jukebox/deploy/raspberrypi
   `/boot/firmware` (older Raspberry Pi OS: `/boot`) -- see "Customizing
   the HDMI resolution" below for *why* three separate places need this
   if you ever need to change it
-- builds the jukebox container image from `app/`
-- installs and enables a systemd service (`jukebox.service`, generated via
-  `podman generate systemd`) that runs the jukebox as a **privileged**
+- builds the spincycle container image from `app/`
+- installs and enables a systemd service (`spincycle.service`, generated via
+  `podman generate systemd`) that runs Spin Cycle as a **privileged**
   container -- broad host device access (GPU/DRM, V4L2 hardware decode,
   ALSA, the physical console) in exchange for not having to hand-enumerate
   exact device nodes. Consistent with the trust level already implied by
@@ -64,7 +68,7 @@ service, and prompts for your video cache location (see below). Non-
 interactive re-runs (e.g. after a `git pull`) can skip both prompts:
 
 ```
-./install.sh --cache-root=/media/pi/JUKEBOX/jukebox_cache --yes
+./install.sh --cache-root=/media/pi/SPINCYCLE/spincycle_cache --yes
 ```
 
 Re-run `install.sh` any time you update the code -- every step is
@@ -75,17 +79,17 @@ installed), which doubles as the upgrade path after a `git pull`.
 Once it's done, the service is already enabled and running:
 
 ```
-sudo systemctl status jukebox     # is it up?
-journalctl -u jukebox -f          # live logs
-sudo systemctl restart jukebox    # after editing config.py, etc.
+sudo systemctl status spincycle     # is it up?
+journalctl -u spincycle -f          # live logs
+sudo systemctl restart spincycle    # after editing config.py, etc.
 ```
 
 A few things are still manual, since they're about your specific setup
 rather than anything `install.sh` can decide for you:
 
 1. **Video cache location.** `install.sh` prompts for your external USB
-   SSD's mount point (e.g. `/media/pi/JUKEBOX`) and bind-mounts it into
-   the container at `/cache` (`JUKEBOX_CACHE_ROOT=/cache` inside the
+   SSD's mount point (e.g. `/media/pi/SPINCYCLE`) and bind-mounts it into
+   the container at `/cache` (`SPINCYCLE_CACHE_ROOT=/cache` inside the
    container). You can leave it blank at install time and set it later
    from the web remote's Settings panel ("Cache storage location")
    instead -- that takes effect immediately (no restart) and is
@@ -112,7 +116,7 @@ rather than anything `install.sh` can decide for you:
    `install.sh` bind-mounts `app/config` into the container (rather than
    baking it into the image), so edits here -- by hand, `git pull`, or via
    the web UI upload below -- take effect on the next `sudo systemctl
-   restart jukebox` without rebuilding the image, and persist across
+   restart spincycle` without rebuilding the image, and persist across
    image rebuilds.
 
    Instead of editing the file directly on the Pi (scp/git pull), open the
@@ -128,8 +132,8 @@ rather than anything `install.sh` can decide for you:
    doesn't depend on your internet connection:
    ```
    sudo podman run --rm -v "$PWD/../../app/config:/app/config" \
-     -v "$PWD/data/cache:/cache" -e JUKEBOX_CACHE_ROOT=/cache \
-     jukebox:latest python3 video_cache.py
+     -v "$PWD/data/cache:/cache" -e SPINCYCLE_CACHE_ROOT=/cache \
+     spincycle:latest python3 video_cache.py
    ```
    (adjust the cache volume path to match whatever you gave `--cache-root`
    at install time). This walks the whole library and downloads anything
@@ -180,7 +184,7 @@ hand-tuning:
    `cmdline.txt` -- **`install.sh` does not edit this file**; if you use a
    non-default connector or resolution, update `DRM_CONNECTOR`/`DRM_MODE`
    in `app/config.py` by hand to match, then `sudo systemctl restart
-   jukebox` (no image rebuild needed if you only touched `config.py`
+   spincycle` (no image rebuild needed if you only touched `config.py`
    values that are read at runtime -- but note `config.py` itself *is*
    baked into the image, so a source change here does need a re-run of
    `install.sh` to rebuild). Use `mpv --drm-connector=help` /
@@ -197,7 +201,7 @@ the splash does the same. Current Raspberry Pi OS ships `/dev/tty1` as
 `root`-only (`crw-------`) -- console access is granted dynamically per
 logged-in session rather than via static group permissions, so a
 non-root process on the host can't normally open it. The container
-sidesteps this entirely: `jukebox.service` runs the container as a
+sidesteps this entirely: `spincycle.service` runs the container as a
 privileged root process, which can open `/dev/tty1` directly, no
 `TTYPath=` dance needed the way a bare host process would.
 
@@ -205,7 +209,7 @@ privileged root process, which can open `/dev/tty1` directly, no
 
 Open `http://<pi-ip>/` (or `http://raspberrypi.local/`) in a browser on
 your laptop or phone -- it works the same on desktop and mobile, no app
-install needed. `main.py` starts a `JukeboxController` and drives it from
+install needed. `main.py` starts a `SpinCycleController` and drives it from
 this browser-based remote: a genre `<select>`, an era `<select>`, and
 Skip/Stop buttons.
 
@@ -225,7 +229,7 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 
 ## Project layout
 
-- [`app/`](app/) - the jukebox codebase itself, device-agnostic. Builds
+- [`app/`](app/) - the Spin Cycle codebase itself, device-agnostic. Builds
   one container image (`app/Dockerfile`) that every `deploy/` target
   runs. All paths below are relative to `app/` unless noted.
 - [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` (see "Setup
@@ -243,7 +247,7 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   standalone to sanity-check the file (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
-- `controller.py` - `JukeboxController`, the live playback engine behind
+- `controller.py` - `SpinCycleController`, the live playback engine behind
   the web remote: tracks the current genre/era/track, and shuffles/plays/
   skips/stops on a background thread as selections change. Logs each
   track play/skip/error to `config.PLAYBACK_LOG`. Intentionally decoupled
@@ -252,7 +256,7 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 - `library_server.py` - LAN-only web server for the whole web remote:
   serves `web/index.html`/`style.css`/`app.js`, a JSON API
   (`/api/status`, `/api/genre`, `/api/era`, `/api/skip`, `/api/stop`,
-  `/api/logs/...`) backed by a `JukeboxController`, and the
+  `/api/logs/...`) backed by a `SpinCycleController`, and the
   library-management routes (`/upload`, `/library.csv` download,
   `/warm-cache`). `main.py` starts it automatically in a background
   thread; it's also runnable standalone (`python3 library_server.py`) for
@@ -266,7 +270,7 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 - `menu.py` - dev/testing-only terminal keyboard mockup, superseded by
   the web remote -- see the Appendix.
 - `main.py` - entry point, dependency check, creates the
-  `JukeboxController` and starts `library_server.py` in the background,
+  `SpinCycleController` and starts `library_server.py` in the background,
   then just waits (the web remote owns all interactivity).
 
 ## Why H.264, not VP9/AV1
@@ -303,7 +307,7 @@ hold, not gone. This section captures the design so it doesn't get lost.
   LCD. Turning the **era dial** (right) live-updates the era. No
   confirmation press needed for either.
 - Once both dials have been still for about a second, that combination is
-  considered selected and the jukebox automatically starts caching and
+  considered selected and Spin Cycle automatically starts caching and
   playing a shuffled set -- the LCD's bottom row shows "loading..." then
   the current track.
 - Turning either dial again -- even mid-playback -- stops the current

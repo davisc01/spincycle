@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the jukebox on a Raspberry Pi 4 as a Podman container: Podman
+# Installs Spin Cycle on a Raspberry Pi 4 as a Podman container: Podman
 # itself, 720p HDMI boot config, an image build, and a systemd service
 # (generated via `podman generate systemd`) enabled to auto-start on boot.
 # Safe to re-run -- rebuilds the image and recreates the service each time,
@@ -17,7 +17,7 @@ usage() {
 Usage: install.sh [--cache-root=PATH] [--yes]
 
   --cache-root=PATH   Video cache location (e.g. an external USB SSD mount,
-                       /media/pi/JUKEBOX/jukebox_cache). Skips the
+                       /media/pi/SPINCYCLE/spincycle_cache). Skips the
                        interactive prompt. Leave unset to be prompted, or
                        to skip entirely -- the container falls back to a
                        local dir under deploy/raspberrypi/data/cache, which
@@ -54,14 +54,14 @@ confirm() {
 }
 
 echo "=================================================================="
-echo " Music Video Jukebox -- Raspberry Pi installer (container-based)"
+echo " Spin Cycle -- Raspberry Pi installer (container-based)"
 echo "=================================================================="
 echo "This will:"
 echo "  - install Podman"
 echo "  - force 720p HDMI output by editing config.txt and cmdline.txt in"
 echo "    /boot/firmware (or /boot on older Raspberry Pi OS)"
-echo "  - build the jukebox container image from $APP_DIR"
-echo "  - install and enable a systemd service that runs the jukebox as a"
+echo "  - build the spincycle container image from $APP_DIR"
+echo "  - install and enable a systemd service that runs spincycle as a"
 echo "    privileged container, auto-starting it on every boot"
 echo
 if ! confirm "Continue?"; then
@@ -145,7 +145,7 @@ echo
 echo "--- Video cache location ---"
 if [ -z "$CACHE_ROOT" ] && [ "$ASSUME_YES" -eq 0 ]; then
   echo "Point this at your external USB SSD's mount point, e.g."
-  echo "/media/pi/JUKEBOX/jukebox_cache. Leave blank to skip for now --"
+  echo "/media/pi/SPINCYCLE/spincycle_cache. Leave blank to skip for now --"
   echo "the container falls back to a local dir on the SD card, which"
   echo "you can change later from the web remote's Settings panel."
   if compgen -G "/media/*/*" > /dev/null 2>&1; then
@@ -178,13 +178,13 @@ mkdir -p "$CACHE_HOST_DIR"
 echo '{"cache_root": "/cache"}' | sudo tee "$APP_DIR/config/settings.json" > /dev/null
 
 echo
-echo "--- Building the jukebox image ---"
-sudo podman build -t jukebox:latest "$APP_DIR"
+echo "--- Building the spincycle image ---"
+sudo podman build -t spincycle:latest "$APP_DIR"
 
 echo
 echo "--- Installing systemd service ---"
-sudo systemctl stop jukebox.service 2>/dev/null || true
-sudo podman rm -f jukebox 2>/dev/null || true
+sudo systemctl stop spincycle.service 2>/dev/null || true
+sudo podman rm -f spincycle 2>/dev/null || true
 
 # /usr/share/alsa is bind-mounted read-only from the host because Raspberry
 # Pi OS's alsa-utils/libasound2 (built by the Raspberry Pi Foundation, "+rpt"
@@ -200,29 +200,29 @@ sudo podman rm -f jukebox 2>/dev/null || true
 # UTS namespace by default, so without this the splash screen's hostname
 # lookup would show the container's random ID instead of the Pi's real
 # hostname.
-sudo podman create --name jukebox \
+sudo podman create --name spincycle \
   --privileged \
   --network host \
   --uts host \
   -v "$APP_DIR/config:/app/config" \
   -v "$CACHE_HOST_DIR:/cache" \
   -v /usr/share/alsa:/usr/share/alsa:ro \
-  -e JUKEBOX_CACHE_ROOT=/cache \
-  jukebox:latest
+  -e SPINCYCLE_CACHE_ROOT=/cache \
+  spincycle:latest
 
-sudo bash -c 'cd /tmp && podman generate systemd --new --name jukebox --files \
+sudo bash -c 'cd /tmp && podman generate systemd --new --name spincycle --files \
   --restart-policy=on-failure -t 15'
-sudo mv /tmp/container-jukebox.service /etc/systemd/system/jukebox.service
-sudo podman rm jukebox
+sudo mv /tmp/container-spincycle.service /etc/systemd/system/spincycle.service
+sudo podman rm spincycle
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now jukebox.service
+sudo systemctl enable --now spincycle.service
 
 echo
 echo "=================================================================="
 echo " Done."
 echo "=================================================================="
-echo "jukebox.service is enabled and running now."
+echo "spincycle.service is enabled and running now."
 echo "Video cache: $CACHE_HOST_DIR"
 echo
 echo "Still to do:"
@@ -230,13 +230,13 @@ echo "  - Add your videos to $APP_DIR/config/library.csv (or via the web"
 echo "    remote's Settings panel once it's running)"
 echo "  - Optionally pre-warm the cache:"
 echo "    sudo podman run --rm -v \"$APP_DIR/config:/app/config\" \\"
-echo "      -v \"$CACHE_HOST_DIR:/cache\" -e JUKEBOX_CACHE_ROOT=/cache \\"
-echo "      jukebox:latest python3 video_cache.py"
+echo "      -v \"$CACHE_HOST_DIR:/cache\" -e SPINCYCLE_CACHE_ROOT=/cache \\"
+echo "      spincycle:latest python3 video_cache.py"
 echo
 echo "Useful commands:"
-echo "  sudo systemctl status jukebox     # is it up?"
-echo "  journalctl -u jukebox -f          # live logs"
-echo "  sudo systemctl restart jukebox    # after editing config.py, etc."
+echo "  sudo systemctl status spincycle     # is it up?"
+echo "  journalctl -u spincycle -f          # live logs"
+echo "  sudo systemctl restart spincycle    # after editing config.py, etc."
 echo
 echo "A reboot is required for the 720p HDMI change to fully take effect"
 echo "(the service is already running, just maybe not yet at 720p)."

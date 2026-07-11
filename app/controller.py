@@ -31,7 +31,7 @@ def _log_playback(line):
         f.write(f"{timestamp}  {line}\n")
 
 
-class JukeboxController:
+class SpinCycleController:
     def __init__(self):
         self.library = library.load_library(config.LIBRARY_FILE)
         self.player = Player()

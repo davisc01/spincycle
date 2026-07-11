@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Music video jukebox - entry point.
+Spin Cycle - entry point.
 
-Starts a JukeboxController (genre/era selection, shuffle playback) and
+Starts a SpinCycleController (genre/era selection, shuffle playback) and
 library_server.py's web remote in a background thread -- the browser-based
 UI (genre/era selectors, skip/stop, settings) is the primary interface
 until the physical rotary-encoder + LCD hardware lands. The old terminal
@@ -61,12 +61,12 @@ def main():
 
     problem = config.cache_root_problem()
     if problem:
-        print(f"[jukebox] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
-        print("[jukebox] Starting anyway -- set a working path from the web remote's Settings panel.")
+        print(f"[spincycle] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
+        print("[spincycle] Starting anyway -- set a working path from the web remote's Settings panel.")
 
-    from controller import JukeboxController
+    from controller import SpinCycleController
     import splash
-    controller = JukeboxController()
+    controller = SpinCycleController()
 
     threading.Thread(target=_start_library_server, args=(controller,), daemon=True).start()
     splash.show_startup(config.LIBRARY_SERVER_PORT, config.VIDEO_DIR)

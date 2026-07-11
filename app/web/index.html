@@ -61,7 +61,7 @@
       <h3>Cache storage location</h3>
       <p>Local path where downloaded videos are cached (e.g. your external drive's mount point). If you deployed via <code>deploy/raspberrypi/install.sh</code>, this is fixed at <code>/cache</code> inside the container -- it's already bind-mounted to your real drive through the <code>--cache-root</code> you gave install.sh. Don't change it here; re-run install.sh with a different <code>--cache-root</code> instead, since editing this field only changes the path the app looks for *inside* the container, not the mount itself.</p>
       <form id="cache-root-form">
-        <input type="text" id="cache-root-input" placeholder="/mnt/usbdrive/jukebox_cache" required>
+        <input type="text" id="cache-root-input" placeholder="/mnt/usbdrive/spincycle_cache" required>
         <button type="submit">Save</button>
       </form>
       <p id="cache-root-result"></p>
