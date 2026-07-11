@@ -90,18 +90,20 @@ rather than anything `install.sh` can decide for you:
 1. **Video cache location.** `install.sh` prompts for your external USB
    SSD's mount point (e.g. `/media/pi/SPINCYCLE`) and bind-mounts it into
    the container at `/cache` (`SPINCYCLE_CACHE_ROOT=/cache` inside the
-   container). You can leave it blank at install time and set it later
-   from the web remote's Settings panel ("Cache storage location")
-   instead -- that takes effect immediately (no restart) and is
-   remembered in `config/settings.json`, which then takes priority.
-   Without either one set, the container falls back to a local dir under
-   `deploy/raspberrypi/data/cache` -- it's `.gitignore`'d and works
-   everywhere, but it lives on the SD card, which defeats the point of
-   using an external drive (see "Target hardware" in `CLAUDE.md`). Don't
-   leave it there for real parties; a bad or unmounted path is never
-   fatal (the web remote still comes up so you can fix it), and the main
-   page shows a warning banner whenever the configured cache folder isn't
-   actually usable.
+   container). This is fixed for the life of the deployment -- since
+   `SPINCYCLE_CACHE_ROOT` is always set in the container's environment,
+   the app itself refuses to change it at runtime (the web remote's
+   Settings panel shows it read-only, under "Deployment info," rather
+   than as an editable field). To change it later, re-run `install.sh`
+   with a different `--cache-root` (see below) -- that regenerates the
+   systemd service with the new bind mount. Leaving it blank at install
+   time falls back to a local dir under `deploy/raspberrypi/data/cache`
+   -- it's `.gitignore`'d and works everywhere, but it lives on the SD
+   card, which defeats the point of using an external drive (see "Target
+   hardware" in `CLAUDE.md`). Don't leave it there for real parties; a
+   bad or unmounted path is never fatal (the web remote still comes up
+   so you can fix it), and the main page shows a warning banner whenever
+   the configured cache folder isn't actually usable.
 
 2. **Add your videos to `config/library.csv`.** It's a plain CSV with
    these columns (header row required):
@@ -140,8 +142,12 @@ rather than anything `install.sh` can decide for you:
    not yet cached, printing progress as it goes. Safe to re-run any time
    you add new URLs -- already-cached videos are skipped instantly. The
    web remote's Settings panel also has a "Warm cache" button that does
-   this remotely, with a live progress line and a scrollable log of
-   anything that failed to download.
+   this remotely, with a live progress line and a "Cache failures" list
+   afterward -- each entry shows the artist/song/genre/era that failed
+   plus an editable URL field and a Remove button, so a bad link can be
+   fixed or dropped from `library.csv` right there without downloading
+   the whole file. The list reflects only the most recent run -- it's
+   rewritten from scratch every time, not an accumulating log.
 
 ### Customizing the HDMI resolution / connector
 
@@ -272,7 +278,8 @@ action. Changing either selection mid-playback re-tunes: stops the
 current video and starts the new combination. Skip moves to the next
 track without changing the selection; Stop halts playback and returns to
 browsing. A Settings button opens the library upload/download, cache-warm
-trigger, and cache/playback log panels covered in "Setup on the Pi" above.
+trigger, cache-failures list, and playback log panels covered in "Setup on
+the Pi" above.
 
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
@@ -301,8 +308,11 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   spreadsheet app.
 - `library.py` - loads `library.csv` into the genre -> era -> tracks
   structure, and resolves a genre/era pick (including the
-  "Anything"/"Anytime" wildcards) into a track list. Also runnable
-  standalone to sanity-check the file (`python3 library.py`).
+  "Anything"/"Anytime" wildcards) into a track list. Also exposes
+  `update_url()`/`remove_by_url()` for single-row edits/deletes by URL
+  (used by the Settings panel's cache-failures list, since the CSV has no
+  other stable row id). Also runnable standalone to sanity-check the file
+  (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
 - `controller.py` - `SpinCycleController`, the live playback engine behind
@@ -325,10 +335,13 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   {genre,era,skip,stop,video-ended,close}`), a range-request-capable
   `/video/<file>` route serving cached videos to browser players, and the
   library-management routes (`/upload`, `/library.csv` download,
-  `/warm-cache`). `main.py` starts it automatically in a background
-  thread; it's also runnable standalone (`python3 library_server.py`) for
-  library maintenance without full playback (the controller-backed routes
-  503 in that mode).
+  `/warm-cache`, `/api/cache-failures` + its `/edit`/`/remove` actions).
+  Each warm-cache run rewrites the cache-failures list from scratch (not
+  an append-only log), so a fixed or removed entry doesn't linger.
+  `main.py` starts it automatically in a background thread; it's also
+  runnable standalone (`python3 library_server.py`) for library
+  maintenance without full playback (the controller-backed routes 503 in
+  that mode).
 - `web/` - the browser UI: `index.html`/`style.css`/`app.js` (the remote --
   vanilla JS, no build step, polls `/api/status` or, in web mode, the
   session picker + `/api/sessions/...`), and `player.html`/`player.js` (the
