@@ -40,7 +40,7 @@ import library
 import video_cache
 
 _warm_lock = threading.Lock()
-_warm_state = {"running": False, "current": 0, "total": 0, "label": ""}
+_warm_state = {"running": False, "current": 0, "total": 0, "label": "", "last_run": None}
 
 _WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
 _IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
@@ -146,6 +146,7 @@ def _run_warm_cache():
     finally:
         with _warm_lock:
             _warm_state["running"] = False
+            _warm_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _tail_lines(path, limit=50):
@@ -230,7 +231,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/logs/playback":
             self._send_json(200, _tail_lines(config.PLAYBACK_LOG))
         elif path == "/api/cache-root":
-            self._send_json(200, {"cache_root": config.CACHE_ROOT, "problem": config.cache_root_problem()})
+            self._send_json(200, {
+                "cache_root": config.CACHE_ROOT,
+                "problem": config.cache_root_problem(),
+                "locked": bool(os.environ.get("SPINCYCLE_CACHE_ROOT")),
+                "playback_mode": config.PLAYBACK_MODE,
+            })
         else:
             self._send_html(404, "<h1>Not found</h1>")
 

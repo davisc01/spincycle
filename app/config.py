@@ -82,8 +82,9 @@ def set_cache_root(path):
     if os.environ.get("SPINCYCLE_CACHE_ROOT"):
         raise RuntimeError(
             "Cache location is fixed by this deployment (SPINCYCLE_CACHE_ROOT "
-            "is set) -- change it by re-running install.sh with a different "
-            "--cache-root instead of setting it here."
+            "is set in the environment) -- change the deploy-time configuration "
+            "instead of setting it here (e.g. re-run deploy/raspberrypi/install.sh "
+            "with a different --cache-root, or update the k8s Deployment's env)."
         )
 
     global CACHE_ROOT
