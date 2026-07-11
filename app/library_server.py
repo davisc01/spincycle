@@ -165,6 +165,13 @@ class Handler(BaseHTTPRequestHandler):
     def session_manager(self):
         return getattr(self.server, "session_manager", None)
 
+    @property
+    def path_no_query(self):
+        # self.path includes the query string (e.g. "/player?session=foo",
+        # from the "Launch Player" link) -- routing below must match on the
+        # path alone, or every query-string request 404s.
+        return self.path.split("?", 1)[0]
+
     def _send_html(self, status, body):
         self._send_bytes(status, body.encode("utf-8"), "text/html; charset=utf-8")
 
@@ -203,25 +210,26 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(404, "<h1>Not found</h1>")
             return
 
-        if self.path in _STATIC_FILES:
-            self._serve_static(self.path)
-        elif self.path.startswith("/video/"):
-            self._serve_video(self.path[len("/video/"):])
-        elif self.path == "/library.csv":
+        path = self.path_no_query
+        if path in _STATIC_FILES:
+            self._serve_static(path)
+        elif path.startswith("/video/"):
+            self._serve_video(path[len("/video/"):])
+        elif path == "/library.csv":
             self._handle_download_csv()
-        elif self.path == "/api/status":
+        elif path == "/api/status":
             if self._require_controller():
                 self._send_json(200, self.controller.status())
-        elif self.path == "/api/library-status":
+        elif path == "/api/library-status":
             self._send_json(200, self._library_status())
-        elif self.path == "/api/cache-status":
+        elif path == "/api/cache-status":
             with _warm_lock:
                 self._send_json(200, dict(_warm_state))
-        elif self.path == "/api/logs/cache":
+        elif path == "/api/logs/cache":
             self._send_json(200, _tail_lines(config.WARM_CACHE_LOG))
-        elif self.path == "/api/logs/playback":
+        elif path == "/api/logs/playback":
             self._send_json(200, _tail_lines(config.PLAYBACK_LOG))
-        elif self.path == "/api/cache-root":
+        elif path == "/api/cache-root":
             self._send_json(200, {"cache_root": config.CACHE_ROOT, "problem": config.cache_root_problem()})
         else:
             self._send_html(404, "<h1>Not found</h1>")
@@ -240,19 +248,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(404, "<h1>Not found</h1>")
             return
 
-        if self.path == "/upload":
+        path = self.path_no_query
+        if path == "/upload":
             self._handle_upload()
-        elif self.path == "/warm-cache":
+        elif path == "/warm-cache":
             self._handle_warm_cache()
-        elif self.path == "/api/genre":
+        elif path == "/api/genre":
             self._handle_select("genre")
-        elif self.path == "/api/era":
+        elif path == "/api/era":
             self._handle_select("era")
-        elif self.path == "/api/skip":
+        elif path == "/api/skip":
             self._handle_transport(self.controller.skip if self.controller else None)
-        elif self.path == "/api/stop":
+        elif path == "/api/stop":
             self._handle_transport(self.controller.stop if self.controller else None)
-        elif self.path == "/api/cache-root":
+        elif path == "/api/cache-root":
             self._handle_set_cache_root()
         else:
             self._send_html(404, "<h1>Not found</h1>")
@@ -276,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         (None, None) for the bare /api/sessions collection route. Returns
         None if this path isn't a sessions route at all, so callers fall
         through to the rest of do_GET/do_POST unchanged."""
-        parts = self.path.strip("/").split("/")
+        parts = self.path_no_query.strip("/").split("/")
         if parts == ["api", "sessions"]:
             return (None, None)
         if len(parts) == 4 and parts[0] == "api" and parts[1] == "sessions":
