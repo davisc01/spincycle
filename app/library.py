@@ -8,6 +8,7 @@ Extra columns are ignored; column order doesn't matter as long as the
 header names match.
 """
 import csv
+import re
 
 REQUIRED_COLUMNS = {"artist", "song", "genre", "era", "url"}
 
@@ -59,20 +60,33 @@ def genre_options(library):
     return list(library.keys()) + [ANY_GENRE]
 
 
+def _era_sort_key(era):
+    """
+    Sort eras chronologically by the year embedded in the label (e.g. "80s"
+    or "1980s" both sort as 80/1980), rather than alphabetically -- a plain
+    string sort would put "1970s" right before "1980s" but "2000s" before
+    "2010s" is fine while "90s" would sort after "2000s". Eras with no digits
+    fall back to alphabetical, after all numbered eras.
+    """
+    match = re.search(r"\d+", era)
+    if match:
+        return (0, int(match.group()))
+    return (1, era)
+
+
 def era_options(library, genre):
     """
-    Real eras plus the ANY_ERA wildcard, for the era picker.
-    If genre is ANY_GENRE, that's every era across the whole library
-    (first-seen order, deduped) rather than just one genre's eras.
+    Real eras plus the ANY_ERA wildcard, for the era picker, sorted
+    chronologically. If genre is ANY_GENRE, that's every era across the
+    whole library (deduped) rather than just one genre's eras.
     """
     if genre == ANY_GENRE:
-        eras = []
+        eras = set()
         for eras_dict in library.values():
-            for era in eras_dict.keys():
-                if era not in eras:
-                    eras.append(era)
-        return eras + [ANY_ERA]
-    return list(library.get(genre, {}).keys()) + [ANY_ERA]
+            eras.update(eras_dict.keys())
+    else:
+        eras = set(library.get(genre, {}).keys())
+    return sorted(eras, key=_era_sort_key) + [ANY_ERA]
 
 
 def tracks_for(library, genre, era):
