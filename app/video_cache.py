@@ -126,21 +126,28 @@ def warm_cache(library, on_progress=None):
     Walk the entire library and download anything not yet cached.
     Intended to run as a nightly cron job / background task, not during a party.
     `library` is the genre -> era -> [track dicts] structure from library.py.
-    """
-    import library as library_module  # local import to avoid a cycle at module load time
-    tracks = library_module.all_tracks(library)
 
-    total = len(tracks)
-    for i, track in enumerate(tracks, start=1):
-        url = track["url"]
-        label = f"{track['artist']} - {track['song']}" if track.get("artist") else url
+    `on_progress(i, total, genre, era, track, err)` is called after each
+    attempt (err is None on success) -- genre/era are passed alongside the
+    track dict (rather than flattening via library.all_tracks(), which
+    drops them) so callers can record a full identity for failures.
+    """
+    entries = [
+        (genre, era, track)
+        for genre, eras in library.items()
+        for era, tracks in eras.items()
+        for track in tracks
+    ]
+
+    total = len(entries)
+    for i, (genre, era, track) in enumerate(entries, start=1):
         try:
-            ensure_cached(url)
+            ensure_cached(track["url"])
             if on_progress:
-                on_progress(i, total, label, None)
+                on_progress(i, total, genre, era, track, None)
         except Exception as e:
             if on_progress:
-                on_progress(i, total, label, e)
+                on_progress(i, total, genre, era, track, e)
 
 
 if __name__ == "__main__":
@@ -149,8 +156,9 @@ if __name__ == "__main__":
 
     lib = library_module.load_library(config.LIBRARY_FILE)
 
-    def report(i, total, label, err):
+    def report(i, total, genre, era, track, err):
+        label = f"{track['artist']} - {track['song']}" if track.get("artist") else track["url"]
         status = "OK" if err is None else f"FAILED ({err})"
-        print(f"[{i}/{total}] {label} -> {status}")
+        print(f"[{i}/{total}] {label} ({genre}/{era}) -> {status}")
 
     warm_cache(lib, on_progress=report)

@@ -99,16 +99,25 @@ def parse_multipart_file(content_type, body):
     raise ValueError("no file part found in upload")
 
 
-def _log_failure(label, url, err):
-    print(f"[warm-cache] FAILED: {label} ({url}): {err}")
+def _load_cache_failures():
+    if not os.path.exists(config.CACHE_FAILURES_FILE):
+        return []
+    try:
+        with open(config.CACHE_FAILURES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def _save_cache_failures(failures):
     problem = config.cache_root_problem()
     if problem:
-        print(f"[warm-cache] Can't write to {config.WARM_CACHE_LOG} either: {problem}")
+        print(f"[warm-cache] Can't write {config.CACHE_FAILURES_FILE}: {problem}")
         return
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"{timestamp}  {label}  {url}  ERROR: {err}\n"
-    with open(config.WARM_CACHE_LOG, "a", encoding="utf-8") as f:
-        f.write(line)
+    tmp_path = config.CACHE_FAILURES_FILE + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(failures, f, indent=2)
+    os.replace(tmp_path, config.CACHE_FAILURES_FILE)
 
 
 def start_background_warm_cache():
@@ -131,19 +140,32 @@ def _run_warm_cache():
             return
         _warm_state.update(running=True, current=0, total=0, label="")
 
+    failures = []
     try:
         lib = library.load_library(config.LIBRARY_FILE)
-        tracks = library.all_tracks(lib)
 
-        def on_progress(i, total, label, err):
+        def on_progress(i, total, genre, era, track, err):
+            label = f"{track['artist']} - {track['song']}" if track.get("artist") else track["url"]
             with _warm_lock:
                 _warm_state.update(current=i, total=total, label=label)
             if err is not None:
-                url = tracks[i - 1]["url"] if i - 1 < len(tracks) else ""
-                _log_failure(label, url, err)
+                print(f"[warm-cache] FAILED: {label} ({track['url']}): {err}")
+                failures.append({
+                    "artist": track.get("artist", ""),
+                    "song": track.get("song", ""),
+                    "genre": genre,
+                    "era": era,
+                    "url": track["url"],
+                    "error": str(err),
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
 
         video_cache.warm_cache(lib, on_progress=on_progress)
     finally:
+        # Rewritten fresh every run (not appended) -- this list means
+        # "still failing right now", so a fixed entry should disappear
+        # once a full run no longer hits it.
+        _save_cache_failures(failures)
         with _warm_lock:
             _warm_state["running"] = False
             _warm_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -226,8 +248,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/cache-status":
             with _warm_lock:
                 self._send_json(200, dict(_warm_state))
-        elif path == "/api/logs/cache":
-            self._send_json(200, _tail_lines(config.WARM_CACHE_LOG))
+        elif path == "/api/cache-failures":
+            self._send_json(200, _load_cache_failures())
         elif path == "/api/logs/playback":
             self._send_json(200, _tail_lines(config.PLAYBACK_LOG))
         elif path == "/api/cache-root":
@@ -259,6 +281,10 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_upload()
         elif path == "/warm-cache":
             self._handle_warm_cache()
+        elif path == "/api/cache-failures/edit":
+            self._handle_cache_failure_edit()
+        elif path == "/api/cache-failures/remove":
+            self._handle_cache_failure_remove()
         elif path == "/api/genre":
             self._handle_select("genre")
         elif path == "/api/era":
@@ -529,6 +555,64 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(303)
         self.send_header("Location", "/")
         self.end_headers()
+
+    def _backup_library_file(self):
+        if os.path.exists(config.LIBRARY_FILE):
+            shutil.copy2(config.LIBRARY_FILE, config.LIBRARY_FILE + ".bak")
+
+    def _reload_library_after_edit(self):
+        if self.controller is not None:
+            self.controller.reload_library()
+
+    def _drop_cache_failure(self, url):
+        failures = [f for f in _load_cache_failures() if f["url"] != url]
+        _save_cache_failures(failures)
+        return failures
+
+    def _handle_cache_failure_edit(self):
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+        url = (payload.get("url") or "").strip()
+        new_url = (payload.get("new_url") or "").strip()
+        if not url or not new_url:
+            self._send_json(400, {"error": "url and new_url must not be empty"})
+            return
+
+        self._backup_library_file()
+        changed = library.update_url(config.LIBRARY_FILE, url, new_url)
+        if not changed:
+            self._send_json(400, {"error": f"No library.csv row found with url: {url}"})
+            return
+
+        self._reload_library_after_edit()
+        failures = self._drop_cache_failure(url)
+        self._send_json(200, failures)
+
+    def _handle_cache_failure_remove(self):
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+        url = (payload.get("url") or "").strip()
+        if not url:
+            self._send_json(400, {"error": "url must not be empty"})
+            return
+
+        self._backup_library_file()
+        removed = library.remove_by_url(config.LIBRARY_FILE, url)
+        if not removed:
+            self._send_json(400, {"error": f"No library.csv row found with url: {url}"})
+            return
+
+        self._reload_library_after_edit()
+        lib = library.load_library(config.LIBRARY_FILE)
+        video_cache.prune(lib)
+        failures = self._drop_cache_failure(url)
+        self._send_json(200, failures)
 
     def log_message(self, fmt, *args):
         print(f"[library_server] {self.address_string()} - {fmt % args}")

@@ -8,6 +8,7 @@ Extra columns are ignored; column order doesn't matter as long as the
 header names match.
 """
 import csv
+import os
 import re
 
 REQUIRED_COLUMNS = {"artist", "song", "genre", "era", "url"}
@@ -44,6 +45,56 @@ def load_library(csv_path):
             library.setdefault(genre, {}).setdefault(era, []).append(track)
 
     return library
+
+
+def _rewrite_rows(csv_path, rows, fieldnames):
+    tmp_path = csv_path + ".tmp"
+    with open(tmp_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(tmp_path, csv_path)
+
+
+def update_url(csv_path, old_url, new_url):
+    """
+    Rewrite every library.csv row whose url matches old_url to new_url,
+    preserving all other columns/order. There's no stable row ID in the CSV
+    (see load_library()), so url -- the cache key that's actually failing --
+    is the natural match key. Returns the number of rows changed.
+    """
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+
+    changed = 0
+    for row in rows:
+        if (row.get("url") or "").strip() == old_url:
+            row["url"] = new_url
+            changed += 1
+
+    if changed:
+        _rewrite_rows(csv_path, rows, fieldnames)
+    return changed
+
+
+def remove_by_url(csv_path, url):
+    """
+    Remove every library.csv row whose url matches. Returns the number of
+    rows removed.
+    """
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+
+    kept = [row for row in rows if (row.get("url") or "").strip() != url]
+    removed = len(rows) - len(kept)
+
+    if removed:
+        _rewrite_rows(csv_path, kept, fieldnames)
+    return removed
 
 
 def all_tracks(library):
