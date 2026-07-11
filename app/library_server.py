@@ -296,6 +296,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             config.set_cache_root(path)
+        except RuntimeError as e:
+            self._send_json(400, {"error": str(e)})
+            return
         except OSError as e:
             self._send_json(400, {"error": f"Can't use that path: {e}"})
             return

@@ -164,6 +164,15 @@ else
 fi
 mkdir -p "$CACHE_HOST_DIR"
 
+# The container always sees its cache root as /cache (bind-mounted from
+# CACHE_HOST_DIR above) -- config/settings.json must never hold anything
+# else. If the web remote's Settings panel was ever used to "fix" the
+# cache path to a real host path (an easy mistake -- see config.py's
+# set_cache_root() for why that silently breaks things), that value
+# persists across redeploys and permanently shadows this mount. Reset it
+# on every run so a stale value can't linger.
+echo '{"cache_root": "/cache"}' > "$APP_DIR/config/settings.json"
+
 echo
 echo "--- Building the jukebox image ---"
 sudo podman build -t jukebox:latest "$APP_DIR"
