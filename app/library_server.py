@@ -140,6 +140,11 @@ def _run_warm_cache():
             return
         _warm_state.update(running=True, current=0, total=0, label="")
 
+    # Clear immediately (not just at the end) so a settings panel left open
+    # during a run doesn't keep showing failures that may no longer apply --
+    # the list is rebuilt fresh as this run's own failures come in.
+    _save_cache_failures([])
+
     failures = []
     try:
         lib = library.load_library(config.LIBRARY_FILE)

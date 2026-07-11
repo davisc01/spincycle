@@ -456,6 +456,12 @@
   });
 
   warmCacheBtn.addEventListener("click", async () => {
+    // Optimistically clear right away -- the server clears its persisted
+    // failures list as soon as the run starts too (see _run_warm_cache),
+    // but that happens in a background thread, so don't wait on a fetch
+    // round-trip to race it. The poll loop below will repopulate with
+    // this run's real failures once it finishes.
+    renderCacheFailures([]);
     await fetch("/warm-cache", { method: "POST" });
     refreshWarmStatus();
   });
