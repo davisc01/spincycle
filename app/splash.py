@@ -15,6 +15,7 @@ locally, over SSH, or (eventually) by a systemd service with
 StandardOutput=tty.
 """
 import os
+import socket
 import sys
 
 from rich.box import DOUBLE
@@ -46,8 +47,6 @@ CONSOLE_WIDTH = 80
 # across rows -- so that's the retro-marquee effect used here instead.
 BANNER = "S P I N     C Y C L E"
 
-TAGLINE = "~ your car-stereo jukebox ~"
-
 
 def _consoles():
     """
@@ -74,9 +73,9 @@ def _consoles():
         print(
             f"[splash] Could not open console {console_tty} for the idle screen ({e}). "
             "Console devices are typically root-only until a session claims them -- run "
-            "as root for now, or (eventually) package this as a systemd service with "
-            "TTYPath= set, which grants ownership automatically. The banner will still "
-            "show up here over SSH in the meantime.",
+            "as root for now. Deployed via deploy/raspberrypi/install.sh, this isn't an "
+            "issue: the jukebox container runs privileged and can already open it. The "
+            "banner will still show up here over SSH in the meantime.",
             file=sys.stderr,
         )
         return
@@ -84,14 +83,43 @@ def _consoles():
     yield Console(file=tty_file, width=CONSOLE_WIDTH)
 
 
-def show_startup(host: str, port: int, video_dir: str) -> None:
+def _network_names() -> list:
+    """
+    Best-effort addresses to show for the web remote: the mDNS-friendly
+    "<hostname>.local" name first (what README tells users to type), then
+    the raw LAN IP as a fallback for networks where mDNS isn't resolving.
+    Determined via a UDP "connect" (no packets actually sent -- it just
+    asks the kernel which local address would route to the internet) so
+    this works without a real external connection as long as a default
+    route exists.
+    """
+    names = [f"{socket.gethostname()}.local"]
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("8.8.8.8", 80))
+        names.append(sock.getsockname()[0])
+    except OSError:
+        pass
+    finally:
+        sock.close()
+    return names
+
+
+def _format_url(host: str, port: int) -> str:
+    return f"http://{host}/" if port == 80 else f"http://{host}:{port}/"
+
+
+def show_startup(port: int, video_dir: str) -> None:
+    names = _network_names()
+    web_line = _format_url(names[0], port)
+    if len(names) > 1:
+        web_line += f" ({_format_url(names[1], port)})"
+
     body = Group(
         Text(BANNER, style=ACCENT_STYLE, justify="center"),
-        Text(TAGLINE, style="dim italic " + ACCENT_STYLE, justify="center"),
         Text(""),
-        Text(f"Web remote: http://{host}:{port}/ (LAN only, no auth)", style=ACCENT_STYLE),
+        Text(f"Web remote: {web_line}", style=ACCENT_STYLE),
         Text(f"Video cache: {video_dir}", style=ACCENT_STYLE),
-        Text("Ctrl+C to quit.", style=ACCENT_STYLE),
     )
     panel = Panel(
         body,

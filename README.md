@@ -59,6 +59,14 @@ cd jukebox/deploy/raspberrypi
   device nodes. Consistent with the trust level already implied by the
   web remote having no authentication -- this is a single-purpose LAN
   appliance, not a multi-tenant server.
+- also bind-mounts the host's `/usr/share/alsa` into the container
+  read-only. Device *node* access (`/dev/snd`) isn't enough on its own --
+  Raspberry Pi OS's `alsa-utils`/`libasound2` build ships card-specific
+  config (`/usr/share/alsa/cards/vc4-hdmi.conf`) that the container's
+  plain-Debian base image doesn't have, and without it ALSA's format
+  negotiation against `vc4-hdmi` fails even though the device is visible.
+  Confirmed by testing on real hardware: video (DRM/V4L2) worked from the
+  first container run with no changes needed; audio needed this fix.
 
 It prompts for confirmation before editing boot files or installing the
 service, and prompts for your video cache location (see below). Non-

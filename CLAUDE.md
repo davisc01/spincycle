@@ -113,7 +113,7 @@ which is called out explicitly below.
 | File | Responsibility |
 |---|---|
 | `Dockerfile` | Builds the jukebox image: `python:3.11-slim-bookworm` + `mpv`/`ffmpeg`/`ca-certificates` via apt, `requirements.txt` via pip, then the app code. `ENTRYPOINT` is `python3 main.py`. `ffmpeg` is required (not just `mpv`) because `config.FORMAT_SELECTOR`'s `bestvideo+bestaudio` merges need it -- easy to miss since a bare-metal Pi OS install often has it incidentally. |
-| `deploy/raspberrypi/install.sh` | The only Pi-specific piece: installs Podman, idempotently forces 720p in the boot config (`config.txt`/`cmdline.txt`, detecting the live HDMI connector), builds the image from `app/`, and installs+enables a `jukebox.service` systemd unit generated via `podman generate systemd --new` (bakes the full `podman run` invocation into the unit, so re-running install.sh safely regenerates it). Runs the container `--privileged` with `--network host`, bind-mounting `app/config` (so `library.csv`/`settings.json` edits persist) and the cache root at `/cache`. See README.md's "Setup on the Pi". |
+| `deploy/raspberrypi/install.sh` | The only Pi-specific piece: installs Podman, idempotently forces 720p in the boot config (`config.txt`/`cmdline.txt`, detecting the live HDMI connector), builds the image from `app/`, and installs+enables a `jukebox.service` systemd unit generated via `podman generate systemd --new` (bakes the full `podman run` invocation into the unit, so re-running install.sh safely regenerates it). Runs the container `--privileged` with `--network host`, bind-mounting `app/config` (so `library.csv`/`settings.json` edits persist), the cache root at `/cache`, and the host's `/usr/share/alsa` read-only (Pi-specific ALSA config `vc4-hdmi` playback needs -- see "Known gaps"). See README.md's "Setup on the Pi". |
 | `config.py` | Paths, yt-dlp format selector, mpv args. Start here for any environment-specific change. |
 | `library.py` | Parses `config/library.csv` into `{genre: {era: [track_dict]}}`. Track dicts have `artist`/`song`/`url`. Also exposes `genre_options()`/`era_options()`/`tracks_for()`, which layer the `ANY_GENRE`/`ANY_ERA` ("Anything"/"Anytime") wildcard picks on top of the raw structure -- `menu.py` (and eventually the dial-driven picker) should go through these rather than indexing the dict directly. |
 | `video_cache.py` | Lazy caching: `ensure_cached(url)` returns a local path, downloading via yt-dlp only if not already indexed. `warm_cache()` walks the whole library (used by the standalone `python3 video_cache.py` pre-warm run). Index is a JSON file (`url -> local path`), written atomically. |
@@ -205,13 +205,26 @@ lock/unlock transitions) once it exists.
 
 ## Known gaps / next steps
 
-- **Unverified**: hardware-accelerated V4L2 M2M decode + direct DRM/KMS
-  scanout from inside the Podman container hasn't been confirmed on real
-  Pi 4 hardware yet -- `--privileged` grants device *access*, but a
-  userspace (container) vs kernel (host `vc4-kms-v3d`) driver version
-  mismatch is still possible. If playback falls back to software decode
-  or DRM output fails inside the container, the fix is almost certainly
-  in `app/Dockerfile`'s base image/package choices, not the deploy layer.
+- **Confirmed on real Pi 4 hardware**: hardware-accelerated V4L2 M2M
+  decode + direct DRM/KMS scanout work fine from inside the privileged
+  Podman container -- no base-image changes needed there. Audio didn't,
+  though: ALSA's `plughw` format negotiation against `vc4-hdmi` failed
+  inside the container ("Sample format not available for playback")
+  even though `/dev/snd` and `/proc/asound/cards` were identical to the
+  host. Root cause: Raspberry Pi OS's `alsa-utils`/`libasound2` (the
+  Raspberry Pi Foundation's own build, `+rpt` suffix) ships card-specific
+  config (`/usr/share/alsa/cards/vc4-hdmi.conf`) that plain Debian's ALSA
+  packages -- what `app/Dockerfile`'s base image uses -- don't have.
+  Device *node* visibility isn't the same as ALSA *userspace config*
+  knowing how to negotiate with that specific card. Fixed by bind-mounting
+  `/usr/share/alsa` read-only from host in `deploy/raspberrypi/
+  install.sh`'s `podman create` (see the comment there) rather than
+  changing the shared `app/Dockerfile` -- this is a Pi-hardware quirk, so
+  it belongs in the Pi-specific deploy layer, not the device-agnostic
+  image. Worth remembering as a pattern for future ALSA-touching devices:
+  check for `<vendor>-rpt`-style package suffixes and `/usr/share/alsa/
+  cards/*.conf` before assuming a "device not found" or format-negotiation
+  failure is a permissions/passthrough problem.
 - Hardware (LCD, 2x rotary encoders) is on order, not yet on the bench --
   `input_device.py`/`menu.py` still reflect the old discrete-menu keyboard
   mockup, not the radio-tuner model described above.

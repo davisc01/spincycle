@@ -173,11 +173,27 @@ echo "--- Installing systemd service ---"
 sudo systemctl stop jukebox.service 2>/dev/null || true
 sudo podman rm -f jukebox 2>/dev/null || true
 
+# /usr/share/alsa is bind-mounted read-only from the host because Raspberry
+# Pi OS's alsa-utils/libasound2 (built by the Raspberry Pi Foundation, "+rpt"
+# package suffix) ships card-specific config (e.g. cards/vc4-hdmi.conf) that
+# plain Debian's alsa packages -- what the container image is built from --
+# don't have. Without it, ALSA's plughw format negotiation against the
+# vc4-hdmi device fails ("Sample format not available for playback") even
+# though the /dev/snd device nodes themselves are visible fine via
+# --privileged. Device nodes being present isn't the same as ALSA's
+# userspace config knowing how to talk to this specific card.
+# --uts host shares the host's hostname (UTS namespace) into the container.
+# --network host alone does NOT do this -- containers get their own private
+# UTS namespace by default, so without this the splash screen's hostname
+# lookup would show the container's random ID instead of the Pi's real
+# hostname.
 sudo podman create --name jukebox \
   --privileged \
   --network host \
+  --uts host \
   -v "$APP_DIR/config:/app/config" \
   -v "$CACHE_HOST_DIR:/cache" \
+  -v /usr/share/alsa:/usr/share/alsa:ro \
   -e JUKEBOX_CACHE_ROOT=/cache \
   jukebox:latest
 
