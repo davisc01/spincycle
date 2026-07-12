@@ -27,3 +27,6 @@ app/config/settings.json
 # Deploy-target-local runtime data (e.g. fallback video cache dir when no
 # --cache-root is given to a deploy/<target>/install.sh)
 deploy/*/data/
+
+# Local Claude Code guidance -- not part of the public-facing repo
+CLAUDE.md
