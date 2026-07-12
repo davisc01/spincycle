@@ -115,6 +115,11 @@ main {
   padding: 0;
 }
 
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .dial-knob {
   position: relative;
   width: 84px;
@@ -260,6 +265,23 @@ button:hover {
 }
 
 #connection-warning[hidden] {
+  display: none;
+}
+
+#empty-library-notice {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  font-size: 0.85rem;
+}
+
+#empty-library-notice[hidden] {
   display: none;
 }
 

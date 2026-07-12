@@ -25,12 +25,13 @@
 
   <main id="remote" hidden>
     <a id="back-to-sessions" href="/" hidden>&larr; Sessions</a>
-    <button id="cache-warning" type="button" hidden></button>
-    <p id="connection-warning" hidden>Connection lost -- retrying&hellip;</p>
+    <button id="cache-warning" type="button" hidden role="alert"></button>
+    <p id="connection-warning" hidden role="alert">Connection lost -- retrying&hellip;</p>
+    <button id="empty-library-notice" type="button" hidden>Your library is empty -- open Settings to upload a library.csv.</button>
 
     <div class="picker-row">
       <div class="dial-picker">
-        <span class="dial-caption">Genre</span>
+        <label class="dial-caption" for="genre-select">Genre</label>
         <div class="dial" id="genre-dial">
           <button type="button" class="dial-step dial-step-prev" aria-label="Previous genre">‹</button>
           <div class="dial-knob"><div class="dial-indicator"></div></div>
@@ -42,7 +43,7 @@
         </select>
       </div>
       <div class="dial-picker">
-        <span class="dial-caption">Era</span>
+        <label class="dial-caption" for="era-select">Era</label>
         <div class="dial" id="era-dial">
           <button type="button" class="dial-step dial-step-prev" aria-label="Previous era">‹</button>
           <div class="dial-knob"><div class="dial-indicator"></div></div>
@@ -50,12 +51,12 @@
         </div>
         <div class="dial-readout" id="era-readout"></div>
         <select id="era-select" class="dial-select">
-          <option value="">-- pick an era --</option>
+          <option value="">-- pick a genre first --</option>
         </select>
       </div>
     </div>
 
-    <p id="status-message">Loading...</p>
+    <p id="status-message" aria-live="polite">Loading...</p>
 
     <div class="transport-row">
       <button id="skip-btn" type="button">Skip</button>

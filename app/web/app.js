@@ -23,6 +23,7 @@
   const playbackLog = document.getElementById("playback-log");
   const cacheWarning = document.getElementById("cache-warning");
   const connectionWarning = document.getElementById("connection-warning");
+  const emptyLibraryNotice = document.getElementById("empty-library-notice");
 
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
@@ -50,8 +51,7 @@
     return `/api/${action}`;
   }
 
-  function fillOptions(select, options, selected) {
-    const placeholder = select === genreSelect ? "-- pick a genre --" : "-- pick an era --";
+  function fillOptions(select, options, selected, placeholder) {
     select.innerHTML = "";
     const empty = document.createElement("option");
     empty.value = "";
@@ -149,6 +149,11 @@
       indicator.style.setProperty("--angle", `${angle}deg`);
       const selectedOption = select.options[index];
       readoutEl.textContent = selectedOption ? selectedOption.textContent : "";
+      // Only the placeholder option exists (e.g. era before a genre is
+      // picked) -- there's nothing to step through yet.
+      const usable = count > 1;
+      prevBtn.disabled = !usable;
+      nextBtn.disabled = !usable;
     }
 
     return { render };
@@ -158,8 +163,8 @@
   const eraDial = createDial(eraSelect, document.getElementById("era-dial"), document.getElementById("era-readout"));
 
   function renderStatus(status) {
-    fillOptions(genreSelect, status.genre_options, status.genre);
-    fillOptions(eraSelect, status.era_options, status.era);
+    fillOptions(genreSelect, status.genre_options, status.genre, "-- pick a genre --");
+    fillOptions(eraSelect, status.era_options, status.era, status.genre ? "-- pick an era --" : "-- pick a genre first --");
     genreDial.render();
     eraDial.render();
     statusMessage.textContent = status.status_message;
@@ -174,6 +179,11 @@
     } else {
       cacheWarning.hidden = true;
     }
+
+    // genre_options is always real genres + the "Anything" wildcard (see
+    // library.genre_options) -- a length of 1 means there are no real
+    // genres at all, i.e. the library is empty or never uploaded.
+    emptyLibraryNotice.hidden = status.genre_options.length > 1;
   }
 
   // A dropped connection (phone loses wifi, server restarts) makes fetch()
@@ -356,6 +366,7 @@
   });
 
   cacheWarning.addEventListener("click", openSettings);
+  emptyLibraryNotice.addEventListener("click", openSettings);
 
   async function refreshSettings() {
     await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshWarmStatus(), refreshCacheFailures(), refreshPlaybackLog()]);

@@ -49,6 +49,15 @@ def _start_library_server(controller=None, session_manager=None):
         library_server.run_server(controller=controller, session_manager=session_manager)
     except OSError as e:
         print(f"[library_server] Could not start web remote: {e}")
+    except Exception:
+        # Anything else (a bug, not an expected bind failure) would
+        # otherwise just kill this background thread -- Python does print
+        # a traceback for that by default, but easy to miss in the noise,
+        # and the rest of the app (splash screen, playback) would keep
+        # running with no other sign the web remote is actually down.
+        import traceback
+        print("[library_server] Web remote crashed unexpectedly:")
+        traceback.print_exc()
 
 
 def main():
