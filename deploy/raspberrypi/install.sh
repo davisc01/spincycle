@@ -145,22 +145,37 @@ echo
 echo "--- Video cache location ---"
 if [ -z "$CACHE_ROOT" ] && [ "$ASSUME_YES" -eq 0 ]; then
   echo "Point this at your external USB SSD's mount point, e.g."
-  echo "/media/pi/SPINCYCLE/spincycle_cache. Leave blank to skip for now --"
-  echo "the container falls back to a local dir on the SD card, which"
-  echo "you can change later from the web remote's Settings panel."
+  echo "/media/pi/SPINCYCLE/spincycle_cache. This is fixed for the life of"
+  echo "this install -- the app refuses to change it at runtime once set, so"
+  echo "the only way to change it later is to re-run install.sh with a"
+  echo "different --cache-root."
   if compgen -G "/media/*/*" > /dev/null 2>&1; then
     echo "Detected mounts under /media:"
     for m in /media/*/*; do
       [ -d "$m" ] && echo "  $m"
     done
   fi
-  read -r -p "Cache root path (blank to skip): " CACHE_ROOT
+  read -r -p "Cache root path (blank to use the SD card instead): " CACHE_ROOT
+  if [ -z "$CACHE_ROOT" ]; then
+    echo
+    echo "WARNING: leaving this blank stores the video cache on the SD card"
+    echo "($DATA_DIR/cache) instead of an external drive. SD cards have weak"
+    echo "write endurance -- repeatedly downloading/rewriting videos can wear"
+    echo "one out. Fine for local testing, not recommended for a real party."
+    if ! confirm "Continue with SD-card storage?"; then
+      echo "Aborted -- re-run and provide --cache-root, or answer this prompt with a path."
+      exit 1
+    fi
+  fi
 fi
 
 if [ -n "$CACHE_ROOT" ]; then
   CACHE_HOST_DIR="$CACHE_ROOT"
 else
   CACHE_HOST_DIR="$DATA_DIR/cache"
+  echo "NOTE: using SD-card storage for the video cache ($CACHE_HOST_DIR) --"
+  echo "not recommended for a real party. Re-run with --cache-root to point"
+  echo "at an external drive."
 fi
 mkdir -p "$CACHE_HOST_DIR"
 

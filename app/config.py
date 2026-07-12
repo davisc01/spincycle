@@ -5,18 +5,23 @@ import json
 import os
 
 # --- Storage paths -----------------------------------------------------
-# Point this at your external USB drive's mount point, e.g. via
-# SPINCYCLE_CACHE_ROOT=/media/pi/SPINCYCLE/spincycle_cache, or set it later from
-# the web remote's Settings panel (see set_cache_root() below) -- either
-# way, don't leave it on the fallback default below for real use. That
-# default is just a repo-local folder (already .gitignore'd) chosen so the
-# app always boots even before you've mounted a drive or set a real path;
-# it lives on the same storage as the code (the SD card, on a Pi), which
+# Point this at your external USB drive's mount point via
+# SPINCYCLE_CACHE_ROOT=/media/pi/SPINCYCLE/spincycle_cache, set once at
+# deploy time (see deploy/raspberrypi/install.sh's --cache-root flag).
+# Don't leave it on the fallback default below for real use. That default
+# is just a repo-local folder (already .gitignore'd) chosen so the app
+# always boots even before you've mounted a drive or set a real path; it
+# lives on the same storage as the code (the SD card, on a Pi), which
 # CLAUDE.md's hardware notes explicitly say to avoid for actual video I/O.
 #
 # CACHE_ROOT (and the paths derived from it below) can also be changed at
-# runtime via set_cache_root() -- the web remote's settings panel does this.
-# A change persists to SETTINGS_FILE so it survives a restart, taking
+# runtime via set_cache_root() -- but only when SPINCYCLE_CACHE_ROOT isn't
+# already set in the environment, which both deploy targets always do (see
+# set_cache_root() below). In practice that makes this reachable only for a
+# bare `python3 main.py` run outside a container, not console or web
+# deployments -- the web remote's Settings panel shows this value read-only
+# ("Deployment info") and has no editable field for it either way. A
+# change persists to SETTINGS_FILE so it survives a restart, taking
 # priority over SPINCYCLE_CACHE_ROOT/the hardcoded default from then on.
 # Everything else in the app reads these as `config.VIDEO_DIR` etc. (fresh
 # attribute lookups, never a cached local copy), so a runtime change takes
