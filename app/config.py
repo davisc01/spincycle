@@ -113,17 +113,23 @@ if PLAYBACK_MODE not in ("console", "web"):
 # --- yt-dlp format selection --------------------------------------------
 # Console mode forces H.264 (avc1) at <=1080p so the Pi 4's V4L2 hardware
 # decoder can handle it -- falls back gracefully if a video genuinely has
-# no H.264 variant available. That constraint doesn't apply to web mode:
-# decoding happens client-side in the viewer's own browser, not on the
-# server, and modern browsers handle VP9/AV1 and much higher resolutions
-# natively -- so web mode gets noticeably better quality for free.
+# no H.264 variant available. Web mode relaxes the resolution cap to 4K
+# but still prefers avc1 first: Safari's VP9/AV1 support is hardware-gated
+# per chip with no software fallback (VP9 needs A12+/Apple Silicon, AV1
+# needs A17 Pro/M3+), so a bare "best" selector plays fine on some
+# viewers' devices and silently fails to play at all on others (confirmed:
+# iPhone playable, iPad/Intel MacBook not, because YouTube's 4K streams
+# are almost always VP9/AV1). H.264 decodes everywhere, hardware or
+# software, on every browser -- falling back to non-avc1 only when a video
+# genuinely has no H.264 variant at that resolution.
 _CONSOLE_FORMAT_SELECTOR = (
     "bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/"
     "best[vcodec^=avc1][height<=1080]/"
     "best[height<=1080]"
 )
 _WEB_FORMAT_SELECTOR = (
-    "bestvideo[height<=2160]+bestaudio/"
+    "bestvideo[vcodec^=avc1][height<=2160]+bestaudio/"
+    "best[vcodec^=avc1][height<=2160]/"
     "best[height<=2160]/"
     "best"
 )
