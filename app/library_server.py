@@ -47,6 +47,14 @@ _warm_state = {"running": False, "current": 0, "total": 0, "label": "", "last_ru
 # open) can't race and silently clobber each other's change to library.csv.
 _library_lock = threading.Lock()
 
+# Sanity caps on request bodies -- this server has no auth, so an
+# unbounded Content-Length read is a memory-exhaustion risk (notable on a
+# Pi 4). Generous for legitimate use: JSON payloads here are just a genre/
+# era/url string, and even a library.csv with thousands of rows is well
+# under a couple MB.
+_MAX_JSON_BODY_BYTES = 1 * 1024 * 1024
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
 _WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
 _IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
 _STATIC_FILES = {
@@ -224,6 +232,12 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         if length == 0:
             return {}
+        if length > _MAX_JSON_BODY_BYTES:
+            # Don't attempt to read/drain an oversized body -- just close
+            # this connection rather than leave unread bytes to corrupt
+            # framing of whatever request would come next on it.
+            self.close_connection = True
+            raise ValueError(f"request body too large ({length} bytes, max {_MAX_JSON_BODY_BYTES})")
         body = self.rfile.read(length)
         return json.loads(body.decode("utf-8")) if body else {}
 
@@ -527,6 +541,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_upload(self):
         length = int(self.headers.get("Content-Length", 0))
+        if length > _MAX_UPLOAD_BYTES:
+            self.close_connection = True
+            self._send_html(413, f"Upload too large ({length} bytes, max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MiB)")
+            return
         body = self.rfile.read(length)
         content_type = self.headers.get("Content-Type", "")
 

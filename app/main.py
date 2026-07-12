@@ -72,6 +72,9 @@ def main():
     if problem:
         print(f"[spincycle] Warning: cache folder {config.CACHE_ROOT} isn't usable ({problem}).")
         print("[spincycle] Starting anyway -- set a working path from the web remote's Settings panel.")
+    else:
+        import video_cache
+        video_cache.clear_incoming()
 
     import splash
 

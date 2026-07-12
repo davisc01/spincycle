@@ -269,6 +269,12 @@
 
   function renderSessionList(sessions) {
     sessionList.innerHTML = "";
+    if (!sessions.length) {
+      const li = document.createElement("li");
+      li.textContent = "(none)";
+      sessionList.appendChild(li);
+      return;
+    }
     for (const s of sessions) {
       const li = document.createElement("li");
       li.className = "session-item";

@@ -137,6 +137,27 @@ def ensure_cached(url, progress_hook=None, force=False):
         return final_path
 
 
+def clear_incoming():
+    """
+    Remove any leftover partial-download files from the staging directory.
+    Meant to run once, early, at process startup (see main.py) -- anything
+    found here then must be from a download interrupted by a crash/kill in
+    a previous run, since a fully-cached file only ever lives in VIDEO_DIR
+    itself (moved there via the atomic os.replace in ensure_cached()), and
+    no new download could legitimately be writing to .incoming yet this
+    early. Safe to skip if it doesn't even exist.
+    """
+    staging_dir = os.path.join(config.VIDEO_DIR, ".incoming")
+    if not os.path.isdir(staging_dir):
+        return
+    for name in os.listdir(staging_dir):
+        path = os.path.join(staging_dir, name)
+        try:
+            os.remove(path)
+        except OSError as e:
+            print(f"[video_cache] Could not remove stale incoming file {path}: {e}")
+
+
 def prune(library):
     """
     Remove cached video files (and their index entries) for URLs no longer
@@ -214,6 +235,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    clear_incoming()
     lib = library_module.load_library(config.LIBRARY_FILE)
 
     def report(i, total, genre, era, track, err):

@@ -99,7 +99,7 @@ class SpinCycleController:
 
         tracks = library.tracks_for(self.library, self._genre, self._era)
         if not tracks:
-            self._status_message = "No Tracks"
+            self._status_message = "no tracks in this genre/era"
             return
 
         self._generation += 1

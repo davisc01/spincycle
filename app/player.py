@@ -13,6 +13,12 @@ import threading
 
 import config
 
+# How long to give mpv to exit gracefully after SIGTERM before escalating
+# to SIGKILL -- a stuck DRM/ALSA state could otherwise ignore SIGTERM
+# forever, and Player.play()'s blocking wait() would then freeze the whole
+# shuffle loop with no way to recover short of restarting the process.
+_TERMINATE_GRACE_SECONDS = 5
+
 
 class Player:
     def __init__(self):
@@ -32,8 +38,19 @@ class Player:
 
     def skip(self):
         """Kill the currently playing video, if any. play() will then return."""
-        if self._proc is not None:
-            self._proc.terminate()
+        proc = self._proc  # snapshot once -- play() can set self._proc to
+        # None concurrently (mpv exiting on its own right as skip() runs),
+        # and re-reading self._proc after this check would race that.
+        if proc is None:
+            return
+        proc.terminate()
+        threading.Thread(target=self._force_kill_if_still_running, args=(proc,), daemon=True).start()
+
+    def _force_kill_if_still_running(self, proc):
+        try:
+            proc.wait(timeout=_TERMINATE_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
     def mark_ended(self):
         """No-op: mpv's own process exit already unblocks play(). Exists so
