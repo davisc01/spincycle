@@ -18,9 +18,9 @@ to GHCR on every push to `app/**`. Actual deployment (a Compose file, raw
 your environment already uses) is up to you -- this README covers what
 the image expects so you can wire it into any of those.
 
-See the main [README.md](../../README.md)'s "Setup as a container" section
-for the full picture (session model, storage, why the format selector
-differs from console mode, etc).
+See the main [README.md](../../README.md) for the overall project
+description, and its "Using the web remote" section for how the
+web-mode session picker works.
 
 ## What the image needs
 
