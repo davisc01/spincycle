@@ -427,6 +427,10 @@
       removeBtn.className = "close-session-btn";
       removeBtn.textContent = "Remove";
       removeBtn.addEventListener("click", async () => {
+        const label = failure.artist ? `${failure.artist} - ${failure.song}` : failure.url;
+        if (!confirm(`Permanently delete "${label}" from the library? This removes the song entirely, not just this failure notice.`)) {
+          return;
+        }
         const result = await postJSON("/api/cache-failures/remove", { url: failure.url });
         if (result.error) {
           alert(result.error);
@@ -443,6 +447,9 @@
 
   uploadForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!confirm("Replace the entire library for everyone with this file? The current library.csv will be overwritten (a .bak copy is kept server-side, but there's no undo from this UI).")) {
+      return;
+    }
     const formData = new FormData(uploadForm);
     const res = await fetch("/upload", { method: "POST", body: formData });
     const text = await res.text();
