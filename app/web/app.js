@@ -22,6 +22,7 @@
   const cacheFailuresList = document.getElementById("cache-failures-list");
   const playbackLog = document.getElementById("playback-log");
   const cacheWarning = document.getElementById("cache-warning");
+  const connectionWarning = document.getElementById("connection-warning");
 
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
@@ -175,8 +176,27 @@
     }
   }
 
+  // A dropped connection (phone loses wifi, server restarts) makes fetch()
+  // reject rather than resolve with a bad status -- track that separately
+  // so the poll loop can surface it instead of freezing silently on stale
+  // state (see player.js's poll(), which already does the same for the
+  // player tab).
+  let connectionOk = true;
+  function setConnectionState(ok) {
+    if (ok === connectionOk) return;
+    connectionOk = ok;
+    connectionWarning.hidden = ok;
+  }
+
   async function fetchStatus() {
-    const res = await fetch(actionUrl("status"));
+    let res;
+    try {
+      res = await fetch(actionUrl("status"));
+    } catch (e) {
+      setConnectionState(false);
+      return null; // transient network hiccup -- just retry next poll
+    }
+    setConnectionState(true);
     if (!res.ok) {
       if (mode === "web") {
         // Session probably got closed (e.g. from another tab) -- bounce
@@ -191,32 +211,39 @@
   }
 
   async function postJSON(url, body) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (e) {
+      setConnectionState(false);
+      return null; // transient network hiccup -- caller should no-op
+    }
+    setConnectionState(true);
     return res.json();
   }
 
   genreSelect.addEventListener("change", async () => {
     const status = await postJSON(actionUrl("genre"), { genre: genreSelect.value || null });
-    renderStatus(status);
+    if (status) renderStatus(status);
   });
 
   eraSelect.addEventListener("change", async () => {
     const status = await postJSON(actionUrl("era"), { era: eraSelect.value || null });
-    renderStatus(status);
+    if (status) renderStatus(status);
   });
 
   skipBtn.addEventListener("click", async () => {
     const status = await postJSON(actionUrl("skip"));
-    renderStatus(status);
+    if (status) renderStatus(status);
   });
 
   stopBtn.addEventListener("click", async () => {
     const status = await postJSON(actionUrl("stop"));
-    renderStatus(status);
+    if (status) renderStatus(status);
   });
 
   launchPlayerBtn.addEventListener("click", () => {

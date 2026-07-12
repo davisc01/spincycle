@@ -14,6 +14,20 @@ import config
 
 _index_lock = threading.Lock()
 
+# Serializes concurrent downloads of the *same* URL (e.g. two web-mode
+# sessions whose genre/era pools overlap, or warm_cache racing a live
+# playback pick at startup) -- without this, two threads can both pass the
+# "not cached yet" check and race on the same staged file. Keyed by url and
+# guarded by its own lock since _index_lock is only held for the brief
+# index read/write, not the whole download.
+_download_locks = {}
+_download_locks_guard = threading.Lock()
+
+
+def _get_download_lock(url):
+    with _download_locks_guard:
+        return _download_locks.setdefault(url, threading.Lock())
+
 
 def _load_index():
     if not os.path.exists(config.INDEX_FILE):
@@ -62,56 +76,65 @@ def ensure_cached(url, progress_hook=None, force=False):
         if cached:
             return cached
 
-    # Import here so the rest of the app doesn't hard-require yt-dlp
-    # just to browse the menu.
-    import yt_dlp
+    with _get_download_lock(url):
+        # Re-check now that we hold the per-URL lock -- another thread may
+        # have just finished downloading this exact URL while we were
+        # waiting for it.
+        if not force:
+            cached = get_cached_path(url)
+            if cached:
+                return cached
 
-    config.ensure_dirs()
-    staging_dir = os.path.join(config.VIDEO_DIR, ".incoming")
-    os.makedirs(staging_dir, exist_ok=True)
+        # Import here so the rest of the app doesn't hard-require yt-dlp
+        # just to browse the menu.
+        import yt_dlp
 
-    # Deliberately no yt-dlp `download_archive` option here -- get_cached_path()
-    # above is already the authoritative "is this downloaded" check, and it's
-    # file-existence-based so it self-heals if a cached file is ever removed
-    # by hand. A separate yt-dlp-side "already downloaded" ledger doesn't know
-    # about that removal and once ensure_cached() decides a real download is
-    # needed, insists it's already done -- which crashes yt-dlp's own merge
-    # logic ('NoneType' object has no attribute 'setdefault') rather than
-    # actually re-downloading. Two ledgers that can disagree is worse than one.
-    ydl_opts = {
-        "format": config.FORMAT_SELECTOR,
-        "merge_output_format": "mp4",
-        "outtmpl": os.path.join(staging_dir, "%(id)s.%(ext)s"),
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        # Staging output is always disposable (never the real cached file),
-        # so it's always safe to overwrite a leftover from an interrupted
-        # previous attempt for the same id, force or not.
-        "overwrites": True,
-    }
-    if progress_hook:
-        ydl_opts["progress_hooks"] = [progress_hook]
+        config.ensure_dirs()
+        staging_dir = os.path.join(config.VIDEO_DIR, ".incoming")
+        os.makedirs(staging_dir, exist_ok=True)
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        # extract_info can return a merged entry; prepare_filename gives the
-        # pre-merge name, so recompute with the final container extension.
-        base = ydl.prepare_filename(info)
-        staged_path = os.path.splitext(base)[0] + ".mp4"
+        # Deliberately no yt-dlp `download_archive` option here -- get_cached_path()
+        # above is already the authoritative "is this downloaded" check, and it's
+        # file-existence-based so it self-heals if a cached file is ever removed
+        # by hand. A separate yt-dlp-side "already downloaded" ledger doesn't know
+        # about that removal and once ensure_cached() decides a real download is
+        # needed, insists it's already done -- which crashes yt-dlp's own merge
+        # logic ('NoneType' object has no attribute 'setdefault') rather than
+        # actually re-downloading. Two ledgers that can disagree is worse than one.
+        ydl_opts = {
+            "format": config.FORMAT_SELECTOR,
+            "merge_output_format": "mp4",
+            "outtmpl": os.path.join(staging_dir, "%(id)s.%(ext)s"),
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            # Staging output is always disposable (never the real cached file),
+            # so it's always safe to overwrite a leftover from an interrupted
+            # previous attempt for the same id, force or not.
+            "overwrites": True,
+        }
+        if progress_hook:
+            ydl_opts["progress_hooks"] = [progress_hook]
 
-    if not os.path.exists(staged_path):
-        raise RuntimeError(f"yt-dlp reported success but file not found: {staged_path}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            # extract_info can return a merged entry; prepare_filename gives the
+            # pre-merge name, so recompute with the final container extension.
+            base = ydl.prepare_filename(info)
+            staged_path = os.path.splitext(base)[0] + ".mp4"
 
-    final_path = os.path.join(config.VIDEO_DIR, os.path.basename(staged_path))
-    os.replace(staged_path, final_path)
+        if not os.path.exists(staged_path):
+            raise RuntimeError(f"yt-dlp reported success but file not found: {staged_path}")
 
-    with _index_lock:
-        index = _load_index()
-        index[url] = final_path
-        _save_index(index)
+        final_path = os.path.join(config.VIDEO_DIR, os.path.basename(staged_path))
+        os.replace(staged_path, final_path)
 
-    return final_path
+        with _index_lock:
+            index = _load_index()
+            index[url] = final_path
+            _save_index(index)
+
+        return final_path
 
 
 def prune(library):

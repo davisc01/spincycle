@@ -59,7 +59,11 @@ class SessionManager:
         with self._lock:
             controller = self._sessions.pop(name, None)
         if controller is not None:
-            controller.stop()  # already stops playback + joins the play thread
+            # close() (not stop()) also marks the controller permanently
+            # closed, so a set_genre()/set_era() call that grabbed this
+            # controller via get() just before the pop above can't spin up
+            # a new play thread we'd no longer be able to find or stop.
+            controller.close()
 
     def _unique_name_locked(self):
         while True:

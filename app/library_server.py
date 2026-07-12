@@ -42,6 +42,11 @@ import video_cache
 _warm_lock = threading.Lock()
 _warm_state = {"running": False, "current": 0, "total": 0, "label": "", "last_run": None}
 
+# Serializes the read-modify-write handlers below (upload, cache-failure
+# edit/remove) so two concurrent Settings-panel requests (e.g. two tabs
+# open) can't race and silently clobber each other's change to library.csv.
+_library_lock = threading.Lock()
+
 _WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
 _IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
 _STATIC_FILES = {
@@ -537,14 +542,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(400, f"Upload rejected: {html.escape(str(e))}")
             return
 
-        if os.path.exists(config.LIBRARY_FILE):
-            shutil.copy2(config.LIBRARY_FILE, config.LIBRARY_FILE + ".bak")
-        os.replace(tmp_path, config.LIBRARY_FILE)
+        with _library_lock:
+            if os.path.exists(config.LIBRARY_FILE):
+                shutil.copy2(config.LIBRARY_FILE, config.LIBRARY_FILE + ".bak")
+            os.replace(tmp_path, config.LIBRARY_FILE)
 
-        if self.controller is not None:
-            self.controller.reload_library()
+            if self.controller is not None:
+                self.controller.reload_library()
 
-        removed = video_cache.prune(lib)
+            removed = video_cache.prune(lib)
 
         genres = len(lib)
         eras = sum(len(e) for e in lib.values())
@@ -586,14 +592,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "url and new_url must not be empty"})
             return
 
-        self._backup_library_file()
-        changed = library.update_url(config.LIBRARY_FILE, url, new_url)
-        if not changed:
-            self._send_json(400, {"error": f"No library.csv row found with url: {url}"})
-            return
+        with _library_lock:
+            self._backup_library_file()
+            changed = library.update_url(config.LIBRARY_FILE, url, new_url)
+            if not changed:
+                self._send_json(400, {"error": f"No library.csv row found with url: {url}"})
+                return
 
-        self._reload_library_after_edit()
-        failures = self._drop_cache_failure(url)
+            self._reload_library_after_edit()
+            failures = self._drop_cache_failure(url)
         self._send_json(200, failures)
 
     def _handle_cache_failure_remove(self):
@@ -607,16 +614,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "url must not be empty"})
             return
 
-        self._backup_library_file()
-        removed = library.remove_by_url(config.LIBRARY_FILE, url)
-        if not removed:
-            self._send_json(400, {"error": f"No library.csv row found with url: {url}"})
-            return
+        with _library_lock:
+            self._backup_library_file()
+            removed = library.remove_by_url(config.LIBRARY_FILE, url)
+            if not removed:
+                self._send_json(400, {"error": f"No library.csv row found with url: {url}"})
+                return
 
-        self._reload_library_after_edit()
-        lib = library.load_library(config.LIBRARY_FILE)
-        video_cache.prune(lib)
-        failures = self._drop_cache_failure(url)
+            self._reload_library_after_edit()
+            lib = library.load_library(config.LIBRARY_FILE)
+            video_cache.prune(lib)
+            failures = self._drop_cache_failure(url)
         self._send_json(200, failures)
 
     def log_message(self, fmt, *args):

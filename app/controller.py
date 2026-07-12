@@ -13,12 +13,19 @@ controller instead of menu.py's KeyboardInput/Event model.
 import os
 import random
 import threading
+import time
 from datetime import datetime
 
 import config
 import library
 import video_cache
 from player import make_player
+
+# If a full shuffled pass through the current genre/era's tracks fails to
+# play even one of them (e.g. every video needs re-caching and the network
+# is down), retrying immediately just hammers yt-dlp/network in a tight
+# loop and flickers the status line. Back off between passes instead.
+_ALL_TRACKS_FAILED_BACKOFF_SECONDS = 30
 
 
 def _log_playback(line):
@@ -47,6 +54,7 @@ class SpinCycleController:
 
         self._generation = 0
         self._play_thread = None
+        self._closed = False
 
     # -- library management -------------------------------------------
 
@@ -79,6 +87,12 @@ class SpinCycleController:
         """Called with self._lock held. (Re)starts playback if both genre
         and era are now set, stopping any playback already in flight."""
         self._stop_playback_locked()
+        if self._closed:
+            # A set_genre()/set_era() call that raced in right as
+            # SessionManager.close() was tearing this controller down --
+            # refuse to spin up a play thread that would then be unreachable
+            # (SessionManager no longer holds a reference to us to stop it).
+            return
         if self._genre is None or self._era is None:
             self._status_message = "Select a genre and era to start playing."
             return
@@ -108,6 +122,16 @@ class SpinCycleController:
         with self._lock:
             self._stop_playback_locked()
             self._status_message = "Stopped. Select a genre and era to start playing."
+
+    def close(self):
+        """Permanently stop this controller -- used by SessionManager.close()
+        instead of stop() so that a genre/era-change call already in flight
+        when a session is closed can't resurrect it (see
+        _maybe_start_playback_locked)."""
+        with self._lock:
+            self._closed = True
+            self._stop_playback_locked()
+            self._status_message = "Session closed."
 
     def _stop_playback_locked(self):
         self._generation += 1  # invalidate any in-flight _play_loop
@@ -150,6 +174,18 @@ class SpinCycleController:
     def _is_current_locked(self, generation):
         return generation == self._generation
 
+    def _wait_or_superseded(self, generation, seconds):
+        """Sleep up to `seconds`, checking every second whether this play
+        loop has since been superseded (stop/skip/genre-or-era change) so a
+        backoff wait doesn't delay those actions. Returns True if the loop
+        should stop."""
+        for _ in range(seconds):
+            time.sleep(1)
+            with self._lock:
+                if not self._is_current_locked(generation):
+                    return True
+        return False
+
     def _play_loop(self, generation, tracks, genre, era):
         while True:
             with self._lock:
@@ -158,6 +194,7 @@ class SpinCycleController:
             playlist = tracks[:]
             random.shuffle(playlist)
 
+            played_any = False
             for track in playlist:
                 with self._lock:
                     if not self._is_current_locked(generation):
@@ -176,6 +213,7 @@ class SpinCycleController:
                         self._status_message = f"cache miss, skipping: {label}"
                     continue
 
+                played_any = True
                 with self._lock:
                     if not self._is_current_locked(generation):
                         return
@@ -189,3 +227,15 @@ class SpinCycleController:
                 with self._lock:
                     if not self._is_current_locked(generation):
                         return
+
+            if not played_any:
+                with self._lock:
+                    if not self._is_current_locked(generation):
+                        return
+                    self._status_message = (
+                        f"No videos in {genre} / {era} could be loaded "
+                        f"(see Settings > Cache failures) -- retrying in "
+                        f"{_ALL_TRACKS_FAILED_BACKOFF_SECONDS}s"
+                    )
+                if self._wait_or_superseded(generation, _ALL_TRACKS_FAILED_BACKOFF_SECONDS):
+                    return
