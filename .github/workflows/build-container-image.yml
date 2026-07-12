@@ -1,12 +1,12 @@
-name: Build and push Spin Cycle (k3s/web target)
+name: Build and push Spin Cycle (container/web target)
 
 # Same app/Dockerfile image used by every deploy target -- this workflow
-# just publishes it to GHCR for the k3s deployment (see deploy/k3s/ and
-# ~/git/myhomelab's k8s/base/spincycle/, which pulls ghcr.io/davisc01/
-# spincycle:latest with imagePullPolicy: Always). After a push here,
-# pick up the new image with:
-#   kubectl rollout restart deployment/spincycle -n spincycle
-# (matches the myhomelab cluster's existing convention, e.g. cashflow.)
+# just publishes it to GHCR for the container deployment (see
+# deploy/container/). After a push here, pick up the new image with
+# whatever your deployment uses to re-pull, e.g.:
+#   kubectl rollout restart deployment/spincycle
+# or `docker compose pull && docker compose up -d` / a Portainer webhook /
+# a `podman pull && systemctl restart` -- see deploy/container/README.md.
 
 on:
   push:

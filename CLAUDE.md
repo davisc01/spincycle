@@ -17,10 +17,10 @@ runtime playback never depends on network availability.
   device plugged into a TV over HDMI, mpv renders straight to the display
   via DRM/KMS. Single `SpinCycleController` for the device's whole
   lifetime.
-- **Web (k3s)** -- `deploy/k3s/`, a multi-viewer deployment where a
-  browser tab you open (via "Launch Player") becomes the player instead of
-  mpv/DRM. Adds `sessions.py`'s `SessionManager`: each browser tab/device
-  gets its own independent genre/era selection and player.
+- **Web (container)** -- `deploy/container/`, a multi-viewer deployment
+  where a browser tab you open (via "Launch Player") becomes the player
+  instead of mpv/DRM. Adds `sessions.py`'s `SessionManager`: each browser
+  tab/device gets its own independent genre/era selection and player.
 
 A 3D-printed car-stereo case with physical rotary dials (genre) and an LCD
 was the *original* plan and may still happen, but the web remote turned
@@ -32,7 +32,7 @@ The codebase is device-agnostic and lives in `app/` -- all file paths
 below are relative to that directory, not the repo root, unless noted.
 `app/` builds a single container image (`app/Dockerfile`) via Podman;
 per-target install/deploy configs live under `deploy/` (`deploy/
-raspberrypi/`, `deploy/k3s/`) -- a future deployment target (a different
+raspberrypi/`, `deploy/container/`) -- a future deployment target (a different
 device, or a different install method) is a new sibling under `deploy/`
 reusing the same `app/` image, not a fork of the codebase. `case/`
 (3D-printed case files, not yet populated) and this `CLAUDE.md`/`README.md`
@@ -67,7 +67,7 @@ identical either way.
   (`--cache-root`), not editable from the Settings panel. See
   README.md's "Video cache location" for the user-facing explanation.
 
-### Web (k3s) -- `deploy/k3s/`
+### Web (container) -- `deploy/container/`
 
 - No hardware decode constraint -- decoding happens client-side in the
   viewer's own browser, so `config.FORMAT_SELECTOR` uses a looser selector
@@ -79,11 +79,14 @@ identical either way.
 - Multi-viewer: `sessions.py`'s `SessionManager` holds one independent
   `SpinCycleController` per browser session -- single replica only
   (sessions live in the pod's memory, not shared storage).
-- Actual k8s manifests + ArgoCD `Application` live in the separate
-  `myhomelab` GitOps repo, not here -- this repo only builds and pushes
+- Deliberately not tied to any one host/orchestrator -- `deploy/
+  container/README.md` documents what the image expects (env vars,
+  volumes, port) and gives example `docker run`/Kubernetes sketches, but
+  actual manifests/compose files/systemd units are left to whoever's
+  deploying it. This repo only builds and pushes
   `ghcr.io/davisc01/spincycle:latest` via `.github/workflows/
-  build-k3s-image.yml` (triggers on any push to `app/**`). See
-  `deploy/k3s/README.md` and README.md's "Setup on k3s".
+  build-container-image.yml` (triggers on any push to `app/**`). See
+  `deploy/container/README.md` and README.md's "Setup as a container".
 
 ## Physical build (on hold)
 
@@ -170,13 +173,13 @@ rather than reworking `input_device.py`/`menu.py`'s event model at all.
 ## Architecture (current code)
 
 All paths are relative to `app/`, except `deploy/raspberrypi/install.sh`
-and `deploy/k3s/` which are called out explicitly below.
+and `deploy/container/` which are called out explicitly below.
 
 | File | Responsibility |
 |---|---|
 | `Dockerfile` | Builds the Spin Cycle image, shared by both deploy targets: `python:3.11-slim-trixie` (matches Raspberry Pi OS's own Debian generation -- see "Known gaps") + `mpv`/`ffmpeg`/`ca-certificates`/`alsa-utils` via apt, `requirements.txt` via pip, then the app code. `ENTRYPOINT` is `python3 main.py`. `ffmpeg` is required (not just `mpv`) because `config.FORMAT_SELECTOR`'s `bestvideo+bestaudio` merges need it -- easy to miss since a bare-metal Pi OS install often has it incidentally. |
 | `deploy/raspberrypi/install.sh` | Console-target installer: installs Podman, idempotently forces 720p in the boot config (`config.txt`/`cmdline.txt`, detecting the live HDMI connector), builds the image from `app/`, and installs+enables a `spincycle.service` systemd unit generated via `podman generate systemd --new` (bakes the full `podman run` invocation into the unit, so re-running install.sh safely regenerates it). Runs the container `--privileged` with `--network host`, bind-mounting `app/config` (so `library.csv`/`settings.json` edits persist), the cache root at `/cache` (always via `SPINCYCLE_CACHE_ROOT=/cache`, which locks the cache path for the container's lifetime -- see "Target hardware"), and the host's `/usr/share/alsa` read-only (Pi-specific ALSA config `vc4-hdmi` playback needs -- see "Known gaps"). See README.md's "Setup on the Pi". |
-| `deploy/k3s/` | Web-target deploy config: just a README pointing at `.github/workflows/build-k3s-image.yml` (repo root), which builds/pushes `ghcr.io/davisc01/spincycle:latest` on every push to `app/**`. The actual k8s manifests + ArgoCD `Application` live in the separate `myhomelab` GitOps repo, not here. See `deploy/k3s/README.md` and README.md's "Setup on k3s". |
+| `deploy/container/` | Web-target deploy docs: a README documenting what the image expects to run as a web deployment (env vars, volumes, port) plus example `docker run`/Kubernetes sketches -- deliberately not tied to any one host/orchestrator. The GitHub Actions workflow that builds/pushes `ghcr.io/davisc01/spincycle:latest` on every push to `app/**` is `.github/workflows/build-container-image.yml` (repo root). See `deploy/container/README.md` and README.md's "Setup as a container". |
 | `config.py` | Paths, yt-dlp format selector (console vs. web, see "Target hardware"), mpv args (`DRM_CONNECTOR`/`DRM_MODE`), `PLAYBACK_MODE`. `CACHE_ROOT` and everything derived from it (`VIDEO_DIR`, `INDEX_FILE`, `CACHE_FAILURES_FILE`, `PLAYBACK_LOG`) can change at runtime via `set_cache_root()`, persisted to `config/settings.json` -- except `set_cache_root()` refuses (`RuntimeError`) whenever `SPINCYCLE_CACHE_ROOT` is set in the environment, which both deploy targets always do. `cache_root_problem()` validates writability without raising, so a bad path never crashes the app. Start here for any environment-specific change. |
 | `library.py` | Parses `config/library.csv` into `{genre: {era: [track_dict]}}`. Track dicts have `artist`/`song`/`url`. Also exposes `genre_options()`/`era_options()`/`tracks_for()`, which layer the `ANY_GENRE`/`ANY_ERA` ("Anything"/"Anytime") wildcard picks on top of the raw structure, and `update_url()`/`remove_by_url()` for single-row edits/deletes by URL (there's no other stable row id) -- both round-trip through `csv.DictReader`/`DictWriter` to preserve columns/order and write atomically. `menu.py` and `controller.py` go through the option/track-list helpers rather than indexing the dict directly. |
 | `video_cache.py` | Lazy caching: `ensure_cached(url)` returns a local path, downloading via yt-dlp only if not already indexed. `warm_cache(library, on_progress)` walks the whole library genre/era-by-genre/era (not via a flattened list, so genre/era survive into the callback) and calls `on_progress(i, total, genre, era, track, err)` per track; used by both the standalone `python3 video_cache.py` pre-warm run and `library_server.py`'s background warm-cache. Index is a JSON file (`url -> local path`), written atomically. `prune(library)` deletes cached files/index entries for URLs no longer in the library (called after an upload or a cache-failures remove). |
@@ -256,12 +259,13 @@ journalctl -u spincycle -f          # live logs
 sudo systemctl restart spincycle    # after editing app/config/library.csv, etc.
 ```
 
-On k3s, there's no install script -- a push to `main` touching `app/**`
-builds and pushes the image; the cluster doesn't pick it up automatically:
+For the container/web target, there's no install script -- a push to
+`main` touching `app/**` builds and pushes the image; wherever it's
+deployed doesn't pick it up automatically:
 
 ```bash
-git push                                                   # builds + pushes ghcr.io/davisc01/spincycle:latest
-kubectl rollout restart deployment/spincycle -n spincycle  # pick up the new image
+git push                                # builds + pushes ghcr.io/davisc01/spincycle:latest
+kubectl rollout restart deployment/spincycle   # or your equivalent -- see deploy/container/README.md
 ```
 
 There's no test suite yet -- `library.py`'s `__main__` block and manual runs
@@ -343,9 +347,8 @@ fake timestamps, assert lock/unlock transitions) once it exists.
 - No 3D-printed case files in this repo yet -- consider a `case/` directory
   once STL/CAD files exist, with panel cutout dimensions matching the
   final LCD and encoder bushing sizes.
-- k3s/web target has no GPU use yet despite one being available on that
-  cluster's node (already used by Jellyfin there via a `/dev/dri` hostPath
-  mount) -- a follow-up would be a one-time GPU-accelerated transcode step
-  in `video_cache.ensure_cached()` (AMD/VAAPI) to normalize whatever
-  codec/resolution YouTube served down to a consistent cached file. See
-  README.md's "Setup on k3s".
+- Container/web target has no GPU use yet, even on hosts where one's
+  available -- a follow-up would be a one-time GPU-accelerated transcode
+  step in `video_cache.ensure_cached()` (VAAPI/NVENC) to normalize
+  whatever codec/resolution YouTube served down to a consistent cached
+  file. See README.md's "Setup as a container".
