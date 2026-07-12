@@ -45,9 +45,17 @@ def ensure_cached(url, progress_hook=None, force=False):
 
     `force=True` skips the already-cached check and redownloads even if an
     index entry/file already exists (e.g. after a FORMAT_SELECTOR change,
-    to replace files fetched under the old selector) -- the old file is
-    left in place until the new one lands, then overwritten by the
-    yt-dlp/ffmpeg output going to the same outtmpl-derived path.
+    to replace files fetched under the old selector).
+
+    Downloads land in a staging subdirectory first and are only moved
+    (os.replace, atomic on the same filesystem) into VIDEO_DIR once the
+    download+merge fully succeeds -- the existing cached file, if any, is
+    left completely untouched until that swap. Learned the hard way: an
+    earlier version downloaded straight to the real VIDEO_DIR path with
+    yt-dlp's `overwrites` option, which deletes the destination file
+    *before* attempting the new download -- a mid-run failure (e.g.
+    YouTube rate-limiting during a bulk forced recache) then left several
+    previously-working tracks with no cached file at all.
     """
     if not force:
         cached = get_cached_path(url)
@@ -59,6 +67,8 @@ def ensure_cached(url, progress_hook=None, force=False):
     import yt_dlp
 
     config.ensure_dirs()
+    staging_dir = os.path.join(config.VIDEO_DIR, ".incoming")
+    os.makedirs(staging_dir, exist_ok=True)
 
     # Deliberately no yt-dlp `download_archive` option here -- get_cached_path()
     # above is already the authoritative "is this downloaded" check, and it's
@@ -71,20 +81,15 @@ def ensure_cached(url, progress_hook=None, force=False):
     ydl_opts = {
         "format": config.FORMAT_SELECTOR,
         "merge_output_format": "mp4",
-        "outtmpl": os.path.join(config.VIDEO_DIR, "%(id)s.%(ext)s"),
+        "outtmpl": os.path.join(staging_dir, "%(id)s.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        # Staging output is always disposable (never the real cached file),
+        # so it's always safe to overwrite a leftover from an interrupted
+        # previous attempt for the same id, force or not.
+        "overwrites": True,
     }
-    if force:
-        # yt-dlp has its own independent "destination file already exists"
-        # skip -- since the output filename is always <id>.mp4 regardless
-        # of codec, without this it silently reuses whatever's already on
-        # disk instead of redownloading, making force=True a no-op for any
-        # URL that was ever cached before (found the hard way: a bulk
-        # forced recache after a FORMAT_SELECTOR change left almost every
-        # already-cached track untouched).
-        ydl_opts["overwrites"] = True
     if progress_hook:
         ydl_opts["progress_hooks"] = [progress_hook]
 
@@ -93,10 +98,13 @@ def ensure_cached(url, progress_hook=None, force=False):
         # extract_info can return a merged entry; prepare_filename gives the
         # pre-merge name, so recompute with the final container extension.
         base = ydl.prepare_filename(info)
-        final_path = os.path.splitext(base)[0] + ".mp4"
+        staged_path = os.path.splitext(base)[0] + ".mp4"
 
-    if not os.path.exists(final_path):
-        raise RuntimeError(f"yt-dlp reported success but file not found: {final_path}")
+    if not os.path.exists(staged_path):
+        raise RuntimeError(f"yt-dlp reported success but file not found: {staged_path}")
+
+    final_path = os.path.join(config.VIDEO_DIR, os.path.basename(staged_path))
+    os.replace(staged_path, final_path)
 
     with _index_lock:
         index = _load_index()
