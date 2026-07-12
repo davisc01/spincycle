@@ -1,8 +1,8 @@
 """
 Session management for web-mode deployments (config.PLAYBACK_MODE ==
 "web"). Unlike the console/Pi target -- one physical device, one viewer,
-one SpinCycleController for the app's whole lifetime -- a k3s-hosted web
-deployment can have several people picking different genre/eras and
+one SpinCycleController for the app's whole lifetime -- a container-hosted
+web deployment can have several people picking different genre/eras and
 playing different videos in different browser tabs at once. SessionManager
 holds one independent SpinCycleController per session, keyed by a random
 adjective-animal name (e.g. "clever-otter") that doubles as the session's

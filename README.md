@@ -196,7 +196,7 @@ hand-tuning:
    `install.sh` to rebuild). Use `mpv --drm-connector=help` /
    `--drm-mode=help` on the Pi to see valid values for your hardware.
 
-## Setup on k3s (web deployment)
+## Setup as a container (Docker/Podman/Kubernetes)
 
 Spin Cycle also runs as a web-only deployment -- no mpv, no physical
 console, no DRM/ALSA -- where a browser tab you launch from the web
@@ -204,50 +204,47 @@ remote becomes the player instead. Same `app/` image as the Pi target,
 just a different `deploy/` sibling and one env var
 (`SPINCYCLE_PLAYBACK_MODE=web`) that swaps the mpv-on-console `Player` for
 a `BrowserPlayer` (see `player.py`/`config.py`). This is meant for a
-multi-viewer home cluster rather than a single physical device, so it adds
-**sessions**: each browser tab/device gets its own independent genre/era
-selection and player, named things like `clever-otter` (see `sessions.py`).
-The web remote's landing page becomes a session picker -- **+ New
-Session**, **Select** to open a session's genre/era/skip/stop controls
-plus a **Launch Player** button, **Close** to tear one down. Console mode
-is untouched by any of this -- it still boots straight into today's
-single-controller UI, no picker.
+multi-viewer setup (a home server, a NAS, a cluster) rather than a single
+physical device, so it adds **sessions**: each browser tab/device gets
+its own independent genre/era selection and player, named things like
+`clever-otter` (see `sessions.py`). The web remote's landing page becomes
+a session picker -- **+ New Session**, **Select** to open a session's
+genre/era/skip/stop controls plus a **Launch Player** button, **Close** to
+tear one down. Console mode is untouched by any of this -- it still boots
+straight into today's single-controller UI, no picker.
 
-Unlike the Pi target, this one's actual Kubernetes manifests and ArgoCD
-`Application` live in the separate `myhomelab` GitOps repo that manages
-this cluster (`k8s/base/spincycle/` + `k8s/apps/spincycle.yaml` there) --
-consistent with every other app on that cluster, and it means ArgoCD
-doesn't need a new cross-repo credential. This repo only builds and
-publishes the image:
+Unlike the Pi target, there's no install script here -- this repo only
+builds and publishes the image, via
+[`.github/workflows/build-container-image.yml`](.github/workflows/build-container-image.yml):
 
 ```
-git push                                # any push to app/** builds + pushes
-                                         # ghcr.io/davisc01/spincycle:latest via
-                                         # .github/workflows/build-k3s-image.yml
-kubectl rollout restart deployment/spincycle -n spincycle   # pick up a new image
+git push   # any push to app/** builds + pushes ghcr.io/davisc01/spincycle:latest
 ```
 
-See [`deploy/k3s/README.md`](deploy/k3s/README.md). A few differences from
-the Pi target worth knowing:
+How you actually run that image (Docker/Podman on a home server, a bare
+Kubernetes `Deployment`, Compose, whatever your infrastructure already
+uses) is entirely up to you -- see
+[`deploy/container/README.md`](deploy/container/README.md) for what the
+image expects (env vars, volumes, port) and example `docker run`/
+Kubernetes sketches. A few differences from the Pi target worth knowing:
 
 - **No hardware decode constraint.** `config.FORMAT_SELECTOR` only forces
   H.264/1080p in console mode, for the Pi's V4L2 decoder. Web mode decodes
   client-side in the viewer's own browser, so it uses a much looser
   selector (up to 4K, any codec) for noticeably better quality.
-- **Storage is two `local-path` PVCs**, not a bind-mounted USB drive: one
+- **Storage is two persistent volumes**, not a bind-mounted USB drive: one
   for the video cache, and a small one for `app/config` (`library.csv`/
   `settings.json`) so a library uploaded through the web UI survives a
-  pod restart. `local-path` is this cluster's only StorageClass (k3s
-  built-in, node-local) -- fine here since the cluster is single-node.
-- **Single replica only.** Sessions live in the running pod's memory
+  restart. Any storage backend your environment provides works -- see
+  `deploy/container/README.md`.
+- **Single replica only.** Sessions live in the running instance's memory
   (`SessionManager`), so a second replica would split traffic across two
   independent, inconsistent session sets.
-- **No GPU use yet**, despite one being available on this cluster's node
-  (already used by Jellyfin there via a `/dev/dri` hostPath mount) --
-  documented as a follow-up: a one-time GPU-accelerated transcode step in
-  `video_cache.ensure_cached()` (AMD/VAAPI) could normalize whatever
-  codec/resolution YouTube served down to a consistent cached file,
-  independent of the format-selector change above.
+- **No GPU use by default**, even if your host has one available (e.g. for
+  hardware transcoding) -- a possible follow-up would be a one-time
+  GPU-accelerated transcode step in `video_cache.ensure_cached()` (VAAPI/
+  NVENC) to normalize whatever codec/resolution YouTube served down to a
+  consistent cached file, independent of the format-selector change above.
 
 ### `/dev/tty1` and the console splash
 
@@ -295,10 +292,11 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 - [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` (see "Setup
   on the Pi" above) plus its gitignored `data/` dir (fallback cache when
   no `--cache-root` is given).
-- [`deploy/k3s/`](deploy/k3s/) - just a README pointing at the GitHub
-  Actions workflow (`.github/workflows/build-k3s-image.yml`) that
-  publishes this target's image; the actual manifests live in the
-  `myhomelab` GitOps repo (see "Setup on k3s" above). Both `deploy/`
+- [`deploy/container/`](deploy/container/) - a README covering what the
+  image expects to run as a web deployment (env vars, volumes, port) plus
+  example `docker run`/Kubernetes sketches (see "Setup as a container"
+  above); the GitHub Actions workflow that publishes this target's image
+  is `.github/workflows/build-container-image.yml`. Both `deploy/`
   targets build and run the same `app/` image -- a future deployment
   target would be a new sibling here too, rather than forking the
   codebase.
@@ -366,9 +364,10 @@ VP9/AV1, which is what YouTube serves by default at higher resolutions.
 In console mode, `config.FORMAT_SELECTOR` forces yt-dlp to grab the H.264
 variant of each video so playback stays hardware-accelerated instead of
 falling back to slow software decode. This constraint doesn't apply to
-the k3s/web deployment target -- there, decoding happens client-side in
-the viewer's own browser rather than on the server, so web mode uses a
-looser selector (up to 4K, any codec) instead. See "Setup on k3s" above.
+the container/web deployment target -- there, decoding happens client-side
+in the viewer's own browser rather than on the server, so web mode uses a
+looser selector (up to 4K, any codec) instead. See "Setup as a container"
+above.
 
 ## Appendix: 3D-printed case & physical controls
 
