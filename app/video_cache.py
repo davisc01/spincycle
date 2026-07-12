@@ -76,6 +76,15 @@ def ensure_cached(url, progress_hook=None, force=False):
         "no_warnings": True,
         "noplaylist": True,
     }
+    if force:
+        # yt-dlp has its own independent "destination file already exists"
+        # skip -- since the output filename is always <id>.mp4 regardless
+        # of codec, without this it silently reuses whatever's already on
+        # disk instead of redownloading, making force=True a no-op for any
+        # URL that was ever cached before (found the hard way: a bulk
+        # forced recache after a FORMAT_SELECTOR change left almost every
+        # already-cached track untouched).
+        ydl_opts["overwrites"] = True
     if progress_hook:
         ydl_opts["progress_hooks"] = [progress_hook]
 
