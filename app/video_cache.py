@@ -38,14 +38,21 @@ def get_cached_path(url):
     return None
 
 
-def ensure_cached(url, progress_hook=None):
+def ensure_cached(url, progress_hook=None, force=False):
     """
     Return a local playable path for `url`, downloading it first if needed.
     Safe to call from multiple threads/processes; index writes are locked.
+
+    `force=True` skips the already-cached check and redownloads even if an
+    index entry/file already exists (e.g. after a FORMAT_SELECTOR change,
+    to replace files fetched under the old selector) -- the old file is
+    left in place until the new one lands, then overwritten by the
+    yt-dlp/ffmpeg output going to the same outtmpl-derived path.
     """
-    cached = get_cached_path(url)
-    if cached:
-        return cached
+    if not force:
+        cached = get_cached_path(url)
+        if cached:
+            return cached
 
     # Import here so the rest of the app doesn't hard-require yt-dlp
     # just to browse the menu.
@@ -121,7 +128,7 @@ def prune(library):
     return removed
 
 
-def warm_cache(library, on_progress=None):
+def warm_cache(library, on_progress=None, force=False):
     """
     Walk the entire library and download anything not yet cached.
     Intended to run as a nightly cron job / background task, not during a party.
@@ -131,6 +138,10 @@ def warm_cache(library, on_progress=None):
     attempt (err is None on success) -- genre/era are passed alongside the
     track dict (rather than flattening via library.all_tracks(), which
     drops them) so callers can record a full identity for failures.
+
+    `force=True` redownloads every track regardless of what's already
+    cached (see ensure_cached) -- e.g. after a FORMAT_SELECTOR change,
+    to replace files fetched under the old selector.
     """
     entries = [
         (genre, era, track)
@@ -142,7 +153,7 @@ def warm_cache(library, on_progress=None):
     total = len(entries)
     for i, (genre, era, track) in enumerate(entries, start=1):
         try:
-            ensure_cached(track["url"])
+            ensure_cached(track["url"], force=force)
             if on_progress:
                 on_progress(i, total, genre, era, track, None)
         except Exception as e:
@@ -151,8 +162,17 @@ def warm_cache(library, on_progress=None):
 
 
 if __name__ == "__main__":
-    # Manual cache-warming run: `python3 video_cache.py`
+    # Manual cache-warming run: `python3 video_cache.py [--force]`
+    import argparse
+
     import library as library_module
+
+    parser = argparse.ArgumentParser(description="Pre-warm the Spin Cycle video cache.")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Redownload every track even if already cached (e.g. after a FORMAT_SELECTOR change).",
+    )
+    args = parser.parse_args()
 
     lib = library_module.load_library(config.LIBRARY_FILE)
 
@@ -161,4 +181,4 @@ if __name__ == "__main__":
         status = "OK" if err is None else f"FAILED ({err})"
         print(f"[{i}/{total}] {label} ({genre}/{era}) -> {status}")
 
-    warm_cache(lib, on_progress=report)
+    warm_cache(lib, on_progress=report, force=args.force)
