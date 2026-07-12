@@ -80,11 +80,38 @@ main {
 }
 
 .dial-picker {
+  position: relative;
   flex: 1 1 45%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  padding: 1.1rem 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid #17140f;
+  background-image:
+    radial-gradient(circle at 35% 30%, #f5f5f5 0%, #cfcfcf 22%, #8a8a8a 50%, #4a4a4a 78%, #262626 100%),
+    radial-gradient(circle at 35% 30%, #f5f5f5 0%, #cfcfcf 22%, #8a8a8a 50%, #4a4a4a 78%, #262626 100%),
+    radial-gradient(circle at 35% 30%, #f5f5f5 0%, #cfcfcf 22%, #8a8a8a 50%, #4a4a4a 78%, #262626 100%),
+    radial-gradient(circle at 35% 30%, #f5f5f5 0%, #cfcfcf 22%, #8a8a8a 50%, #4a4a4a 78%, #262626 100%),
+    repeating-linear-gradient(98deg, rgba(255, 255, 255, 0.05) 0px, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 3px),
+    linear-gradient(155deg, #6e6e6e, #46443f 42%, #262421 100%);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat;
+  background-position:
+    8px 8px,
+    calc(100% - 8px) 8px,
+    8px calc(100% - 8px),
+    calc(100% - 8px) calc(100% - 8px),
+    0 0,
+    0 0;
+  background-size:
+    10px 10px, 10px 10px, 10px 10px, 10px 10px,
+    auto,
+    100% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.55),
+    0 6px 14px rgba(0, 0, 0, 0.45);
 }
 
 .dial-caption {
@@ -141,6 +168,10 @@ button:disabled {
     width: 96px;
     height: 96px;
   }
+
+  .dial-picker {
+    padding: 1.35rem 1rem 1.1rem;
+  }
 }
 
 .dial-indicator {
@@ -158,11 +189,29 @@ button:disabled {
 }
 
 .dial-readout {
+  position: relative;
+  overflow: hidden;
   font-family: "SFMono-Regular", Consolas, Menlo, monospace;
   font-size: 0.9rem;
   color: var(--accent);
   min-height: 1.2em;
   text-align: center;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.3rem;
+  border: 1px solid #05100a;
+  background: linear-gradient(160deg, #04120a, #0b2013 55%, #04120a);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.8),
+    inset 0 0 6px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 0 6px rgba(57, 255, 138, 0.5);
+}
+
+.dial-readout::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.08) 50%, transparent 58%);
+  pointer-events: none;
 }
 
 .dial-select {
@@ -203,15 +252,28 @@ button:hover {
 }
 
 #status-message {
+  position: relative;
+  overflow: hidden;
   margin-top: 1.5rem;
   font-size: 1.05rem;
   font-family: "SFMono-Regular", Consolas, Menlo, monospace;
   color: var(--accent);
-  background: #0a0f0a;
+  background: linear-gradient(160deg, #050e07, #0d1f0f 55%, #050e07);
   border: 1px solid var(--border);
   border-radius: 0.4rem;
   padding: 0.75rem 1rem;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.85),
+    inset 0 0 10px rgba(0, 0, 0, 0.5);
   text-shadow: 0 0 6px rgba(57, 255, 138, 0.5);
+}
+
+#status-message::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.06) 50%, transparent 58%);
+  pointer-events: none;
 }
 
 #status-message.playing {
@@ -512,6 +574,21 @@ aside h3 {
   .dial-knob {
     width: 72px;
     height: 72px;
+  }
+
+  .dial-picker {
+    padding: 0.9rem 0.6rem 0.75rem;
+    background-position:
+      6px 6px,
+      calc(100% - 6px) 6px,
+      6px calc(100% - 6px),
+      calc(100% - 6px) calc(100% - 6px),
+      0 0,
+      0 0;
+    background-size:
+      8px 8px, 8px 8px, 8px 8px, 8px 8px,
+      auto,
+      100% 100%;
   }
 
   /* .dial-step stays at the base 44px (the accessible touch-target
