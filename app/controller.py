@@ -214,8 +214,14 @@ class SpinCycleController:
                     continue
 
                 played_any = True
+                # Use the track's own genre/era (not the loop-level genre/era
+                # params, which can be the ANY_GENRE/ANY_ERA wildcard) so the
+                # overlay shows what the track actually is, e.g. "Rock" for a
+                # rock song even when the viewer picked "Anything".
                 overlay_text = "\n".join(
-                    line for line in (track["artist"], track["song"], f"{genre} / {era}") if line
+                    line for line in (
+                        track["artist"], track["song"], f"{track['genre']} / {track['era']}"
+                    ) if line
                 )
                 with self._lock:
                     if not self._is_current_locked(generation):
@@ -223,8 +229,8 @@ class SpinCycleController:
                     self._current_track = {
                         "artist": track["artist"],
                         "song": track["song"],
-                        "genre": genre,
-                        "era": era,
+                        "genre": track["genre"],
+                        "era": track["era"],
                         "label": label,
                     }
                     self._current_video_path = local_path

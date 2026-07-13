@@ -1,7 +1,9 @@
 """
 Loads config/library.csv into a genre -> era -> [tracks] structure, where
-each "track" is a dict with artist/song/url -- so the UI can show
-"Artist - Song" instead of a raw link.
+each "track" is a dict with artist/song/url/genre/era -- so the UI can show
+"Artist - Song" instead of a raw link, and callers that only have a track
+in hand (e.g. after a wildcard genre/era pick) still know its real
+genre/era rather than just the wildcard that was selected.
 
 Expected columns (header row required): artist,song,genre,era,url
 Extra columns are ignored; column order doesn't matter as long as the
@@ -41,7 +43,7 @@ def load_library(csv_path):
                 print(f"Skipping row {row_num}: missing genre/era/url -> {row}")
                 continue
 
-            track = {"artist": artist, "song": song, "url": url}
+            track = {"artist": artist, "song": song, "url": url, "genre": genre, "era": era}
             library.setdefault(genre, {}).setdefault(era, []).append(track)
 
     return library

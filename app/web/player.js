@@ -55,6 +55,7 @@
       const res = await fetch(`/api/sessions/${encodeURIComponent(session)}/status`);
       if (!res.ok) {
         overlay.textContent = res.status === 404 ? "Session closed." : `Error: ${res.status}`;
+        overlay.style.display = "";
         return;
       }
       status = await res.json();
@@ -62,7 +63,14 @@
       return; // transient network hiccup -- just try again next poll
     }
 
-    overlay.textContent = status.status_message || "";
+    // "Now playing: X" is redundant with the track-overlay above, which
+    // already shows artist/song for the first 5s of each video -- suppress
+    // it here so this bar is only visible for loading/cache-miss/error/idle
+    // messages, not just repeating what the overlay already said.
+    const message = status.status_message || "";
+    const showMessage = message && !message.startsWith("Now playing:");
+    overlay.textContent = showMessage ? message : "";
+    overlay.style.display = showMessage ? "" : "none";
 
     if (status.video_url !== currentUrl) {
       currentUrl = status.video_url;
