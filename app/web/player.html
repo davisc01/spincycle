@@ -52,12 +52,30 @@
       border-radius: 0.5rem;
       background: rgba(0, 0, 0, 0.5);
     }
+    #track-overlay {
+      position: fixed;
+      left: 1rem;
+      bottom: 1rem;
+      max-width: 60%;
+      font: 600 16px system-ui, -apple-system, sans-serif;
+      color: #39ff8a;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      line-height: 1.4;
+      white-space: pre-line;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #track-overlay.shown {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
   <video id="v" playsinline controls></video>
   <button id="tap-to-play" type="button"><span>&#9654; Click to start playback</span></button>
   <div id="overlay"></div>
+  <div id="track-overlay"></div>
   <script src="/player.js"></script>
 </body>
 </html>

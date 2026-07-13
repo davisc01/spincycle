@@ -4,6 +4,7 @@
   const video = document.getElementById("v");
   const overlay = document.getElementById("overlay");
   const tapToPlay = document.getElementById("tap-to-play");
+  const trackOverlay = document.getElementById("track-overlay");
 
   if (!session) {
     overlay.textContent = "No session specified -- open this page from the web remote's \"Launch Player\" button.";
@@ -11,6 +12,28 @@
   }
 
   let currentUrl = null;
+  let overlayHideTimer = null;
+
+  function showTrackOverlay(track) {
+    if (!track) return;
+    const lines = [track.artist, track.song, `${track.genre} / ${track.era}`].filter(Boolean);
+    if (lines.length === 0) return;
+    trackOverlay.textContent = lines.join("\n");
+    trackOverlay.classList.add("shown");
+    if (overlayHideTimer) clearTimeout(overlayHideTimer);
+    overlayHideTimer = setTimeout(() => {
+      trackOverlay.classList.remove("shown");
+      overlayHideTimer = null;
+    }, 5000);
+  }
+
+  function hideTrackOverlay() {
+    if (overlayHideTimer) {
+      clearTimeout(overlayHideTimer);
+      overlayHideTimer = null;
+    }
+    trackOverlay.classList.remove("shown");
+  }
 
   function showTapToPlay() {
     tapToPlay.classList.add("shown");
@@ -52,10 +75,12 @@
           // which is easy to miss (see player.html).
           showTapToPlay();
         });
+        showTrackOverlay(status.current_track);
       } else {
         video.removeAttribute("src");
         video.load();
         hideTapToPlay();
+        hideTrackOverlay();
       }
     }
   }

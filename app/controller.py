@@ -214,15 +214,24 @@ class SpinCycleController:
                     continue
 
                 played_any = True
+                overlay_text = "\n".join(
+                    line for line in (track["artist"], track["song"], f"{genre} / {era}") if line
+                )
                 with self._lock:
                     if not self._is_current_locked(generation):
                         return
-                    self._current_track = label
+                    self._current_track = {
+                        "artist": track["artist"],
+                        "song": track["song"],
+                        "genre": genre,
+                        "era": era,
+                        "label": label,
+                    }
                     self._current_video_path = local_path
                     self._status_message = f"Now playing: {label}"
                 _log_playback(f"PLAY  {genre} / {era}  {label}")
 
-                self.player.play(local_path)
+                self.player.play(local_path, overlay_text=overlay_text)
 
                 with self._lock:
                     if not self._is_current_locked(generation):

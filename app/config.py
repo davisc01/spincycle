@@ -161,6 +161,11 @@ MPV_AUDIO_DEVICE = "alsa/plughw:CARD=vc4hdmi0,DEV=0"
 # values on the Pi with `mpv --drm-connector=help` / `--drm-mode=help`).
 DRM_CONNECTOR = "HDMI-A-1"
 DRM_MODE = "1280x720@60"
+# Unix socket player.py uses to send the MTV-style overlay text to mpv via
+# its JSON IPC protocol (show-text). A single fixed path is safe: console
+# mode runs exactly one Player for the app's whole lifetime, and play()
+# never runs two mpv processes concurrently (it blocks on wait()).
+MPV_IPC_SOCKET = "/tmp/spincycle-mpv-ipc.sock"
 MPV_EXTRA_ARGS = [
     "--fs",
     "--really-quiet",
@@ -170,6 +175,16 @@ MPV_EXTRA_ARGS = [
     "--gpu-context=drm",
     f"--drm-connector={DRM_CONNECTOR}",
     f"--drm-mode={DRM_MODE}",
+    f"--input-ipc-server={MPV_IPC_SOCKET}",
+    # Lower-left OSD alignment for the MTV-style overlay -- fine to apply
+    # globally since nothing else on the physical console shows OSD text
+    # (no keyboard/seek interaction there).
+    "--osd-align-x=left",
+    "--osd-align-y=bottom",
+    "--osd-color=#39FF8A",
+    "--osd-font-size=32",
+    "--osd-margin-x=48",
+    "--osd-margin-y=64",
 ]
 
 # --- Console display ------------------------------------------------------
