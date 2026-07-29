@@ -28,5 +28,13 @@ app/config/settings.json
 # --cache-root is given to a deploy/<target>/install.sh)
 deploy/*/data/
 
+# deploy/macos build output (build.sh regenerates all of this)
+deploy/macos/.venv-build/
+deploy/macos/build/
+deploy/macos/dist/
+deploy/macos/icon.icns
+deploy/macos/icon.iconset/
+deploy/macos/icon_source.png
+
 # Local Claude Code guidance -- not part of the public-facing repo
 CLAUDE.md

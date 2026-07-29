@@ -17,9 +17,8 @@ today.
 
 ## Deployment targets
 
-Two deployment targets share one codebase and container image
-([`app/`](app/)) -- see each target's README for hardware requirements
-and setup instructions:
+Three deployment targets share one codebase ([`app/`](app/)) -- see each
+target's README for hardware requirements and setup instructions:
 
 - **[Console (Raspberry Pi 4)](deploy/raspberrypi/README.md)** -- one
   physical device plugged into a TV over HDMI; mpv renders straight to
@@ -29,10 +28,15 @@ and setup instructions:
   image on a home server, NAS, or Kubernetes cluster; a browser tab you
   open becomes the player instead of mpv/DRM, and it supports multiple
   simultaneous viewers, each with their own session.
+- **[macOS (windowed app)](deploy/macos/README.md)** -- the same web-mode
+  experience as the container target, packaged as `Spin Cycle.app`: a
+  normal Mac app (Dock icon, Cmd-Q) whose window is the web remote --
+  runs on your Mac instead of a cluster, no Docker, no volumes, nothing
+  to provision if you've already got a Mac.
 
 A future deployment target (a different device, or a different install
 method) would be a new sibling under `deploy/` reusing the same `app/`
-image, not a fork of the codebase.
+codebase, not a fork of it.
 
 ## Using the web remote
 
@@ -76,8 +80,9 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 ## Project layout
 
 - [`app/`](app/) - the Spin Cycle codebase itself, device-agnostic. Builds
-  one container image (`app/Dockerfile`) that every `deploy/` target
-  runs. All paths below are relative to `app/` unless noted.
+  one container image (`app/Dockerfile`) that the Pi and container targets
+  run; the macOS target runs the same code directly (no container) via
+  `py2app`. All paths below are relative to `app/` unless noted.
 - [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` plus its
   gitignored `data/` dir (fallback cache when no `--cache-root` is given)
   -- see [`deploy/raspberrypi/README.md`](deploy/raspberrypi/README.md)
@@ -87,9 +92,14 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   image expects to run as a web deployment (env vars, volumes, port) plus
   example `docker run`/Kubernetes sketches; the GitHub Actions workflow
   that publishes this target's image is
-  `.github/workflows/build-container-image.yml`. Both `deploy/` targets
-  build and run the same `app/` image -- a future deployment target would
-  be a new sibling here too, rather than forking the codebase.
+  `.github/workflows/build-container-image.yml`.
+- [`deploy/macos/`](deploy/macos/) - `build.sh` packages `app/` as
+  `Spin Cycle.app`, a normal windowed Mac app (Dock icon, Cmd-Q) whose
+  window is a `WKWebView` running the same web mode as the container
+  target -- see [`deploy/macos/README.md`](deploy/macos/README.md). All
+  three `deploy/` targets build and run the same `app/` codebase -- a
+  future deployment target would be a new sibling here too, rather than
+  forking it.
 - `config.py` - paths, yt-dlp format string, mpv settings. Edit this first.
 - `config/library.csv` - your actual video library: artist, song, genre,
   era, url. Easiest file to hand-edit; open it in any text editor or

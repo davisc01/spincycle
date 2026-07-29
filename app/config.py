@@ -26,7 +26,14 @@ import os
 # Everything else in the app reads these as `config.VIDEO_DIR` etc. (fresh
 # attribute lookups, never a cached local copy), so a runtime change takes
 # effect immediately everywhere without a restart.
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "config", "settings.json")
+#
+# CONFIG_DIR defaults to the in-repo config/ folder (bind-mounted by the Pi
+# and container targets), but a bundled app -- deploy/macos's .app, whose
+# own Resources folder isn't a sensible place for a user's growing
+# library.csv/settings.json -- overrides it via SPINCYCLE_CONFIG_DIR to a
+# writable, per-user directory instead (see deploy/macos/menubar_app.py).
+CONFIG_DIR = os.environ.get("SPINCYCLE_CONFIG_DIR", os.path.join(os.path.dirname(__file__), "config"))
+SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 _FALLBACK_CACHE_ROOT = os.path.join(os.path.dirname(__file__), "cache")
 _DEFAULT_CACHE_ROOT = os.environ.get("SPINCYCLE_CACHE_ROOT", _FALLBACK_CACHE_ROOT)
 
@@ -104,7 +111,7 @@ def set_cache_root(path):
     _save_settings(settings)
 
 
-LIBRARY_FILE = os.path.join(os.path.dirname(__file__), "config", "library.csv")
+LIBRARY_FILE = os.path.join(CONFIG_DIR, "library.csv")
 
 # --- Playback mode ---------------------------------------------------------
 # "console" (default): mpv renders to the physical console via DRM/KMS, as
@@ -199,10 +206,12 @@ MPV_EXTRA_ARGS = [
 CONSOLE_TTY = os.environ.get("SPINCYCLE_CONSOLE_TTY", "/dev/tty1")
 
 # --- Library management web page (library_server.py) ---------------------
-# Port 80 is privileged on Linux -- see library_server.py's module
-# docstring for the setcap incantation needed to bind it without root.
+# Port 80 is privileged on Linux and macOS alike -- see library_server.py's
+# module docstring for the setcap incantation needed to bind it without
+# root. SPINCYCLE_SERVER_PORT overrides it for targets that'd rather not
+# require root/sudo at all (deploy/macos runs unprivileged on 8080).
 LIBRARY_SERVER_HOST = "0.0.0.0"
-LIBRARY_SERVER_PORT = 80
+LIBRARY_SERVER_PORT = int(os.environ.get("SPINCYCLE_SERVER_PORT", 80))
 
 
 def ensure_dirs():
