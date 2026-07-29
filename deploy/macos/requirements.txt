@@ -1,0 +1,11 @@
+# app/requirements.txt (rich, yt-dlp) is installed separately by build.sh,
+# same runtime deps the Pi/container targets use. These are macOS-app-only:
+py2app
+# The window is a WKWebView (app.py) -- pyobjc-framework-Cocoa (AppKit,
+# Foundation) comes along as WebKit's own dependency, but listed
+# explicitly since app.py imports it directly too.
+pyobjc-framework-Cocoa
+pyobjc-framework-WebKit
+# Build-time only -- generates icon.icns from a crop of the existing app
+# icon artwork (see build.sh).
+pillow
