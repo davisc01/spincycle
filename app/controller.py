@@ -50,6 +50,7 @@ class SpinCycleController:
         self._playing = False
         self._current_track = None
         self._current_video_path = None
+        self._queued_track = None
         self._status_message = "Select a genre and era to start playing."
 
         self._generation = 0
@@ -118,6 +119,24 @@ class SpinCycleController:
     def skip(self):
         self.player.skip()
 
+    def queue_next(self, url):
+        """Make the track matching `url` (in the current genre/era) play
+        immediately after the one in flight, cutting ahead of the shuffle
+        order -- see _play_loop. Raises ValueError if there's no active
+        genre/era or the url isn't among its tracks."""
+        with self._lock:
+            if self._genre is None or self._era is None:
+                raise ValueError("no genre/era selected")
+            tracks = library.tracks_for(self.library, self._genre, self._era)
+            track = next((t for t in tracks if t["url"] == url), None)
+            if track is None:
+                raise ValueError("track not found in the current genre/era")
+            self._queued_track = track
+
+    def clear_queue(self):
+        with self._lock:
+            self._queued_track = None
+
     def stop(self):
         with self._lock:
             self._stop_playback_locked()
@@ -140,6 +159,7 @@ class SpinCycleController:
         self._playing = False
         self._current_track = None
         self._current_video_path = None
+        self._queued_track = None
         if thread is not None and thread.is_alive():
             self.player.skip()
             # Release the lock while joining so the play loop (which takes
@@ -163,10 +183,28 @@ class SpinCycleController:
                 "era_options": era_options,
                 "playing": self._playing,
                 "current_track": self._current_track,
+                "queued_track": self._queued_track,
                 "video_url": f"/video/{os.path.basename(self._current_video_path)}" if self._current_video_path else None,
                 "playback_mode": config.PLAYBACK_MODE,
                 "status_message": self._status_message,
                 "cache_root_problem": config.cache_root_problem(),
+            }
+
+    def track_list(self):
+        """Every track in the current genre/era, sorted by artist then
+        song, for the DJ tab -- alongside what's currently playing/queued
+        so it can highlight both without a second request."""
+        with self._lock:
+            if self._genre is None or self._era is None:
+                tracks = []
+            else:
+                tracks = library.tracks_for(self.library, self._genre, self._era)
+            return {
+                "genre": self._genre,
+                "era": self._era,
+                "current_track": self._current_track,
+                "queued_track": self._queued_track,
+                "tracks": sorted(tracks, key=lambda t: (t["artist"].lower(), t["song"].lower())),
             }
 
     # -- playback loop -------------------------------------------------
@@ -193,12 +231,26 @@ class SpinCycleController:
                     return
             playlist = tracks[:]
             random.shuffle(playlist)
+            playlist_iter = iter(playlist)
 
             played_any = False
-            for track in playlist:
+            while True:
                 with self._lock:
                     if not self._is_current_locked(generation):
                         return
+                    queued = self._queued_track
+                    if queued is not None:
+                        self._queued_track = None
+                if queued is not None:
+                    # A track queued from the DJ tab cuts ahead of the
+                    # shuffle order without consuming it -- the iterator
+                    # picks up where it left off once this one plays.
+                    track = queued
+                else:
+                    try:
+                        track = next(playlist_iter)
+                    except StopIteration:
+                        break
                 label = f"{track['artist']} - {track['song']}" if track["artist"] else track["url"]
 
                 with self._lock:
@@ -231,6 +283,7 @@ class SpinCycleController:
                         "song": track["song"],
                         "genre": track["genre"],
                         "era": track["era"],
+                        "url": track["url"],
                         "label": label,
                     }
                     self._current_video_path = local_path

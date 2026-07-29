@@ -4,6 +4,8 @@
   const statusMessage = document.getElementById("status-message");
   const skipBtn = document.getElementById("skip-btn");
   const stopBtn = document.getElementById("stop-btn");
+  const djBtn = document.getElementById("dj-btn");
+  const upNextLine = document.getElementById("up-next-line");
   const launchPlayerBtn = document.getElementById("launch-player-btn");
   const backToSessions = document.getElementById("back-to-sessions");
 
@@ -171,7 +173,16 @@
     statusMessage.classList.toggle("playing", status.playing);
     stopBtn.disabled = !status.playing;
     skipBtn.disabled = !status.playing;
+    djBtn.disabled = !status.genre || !status.era;
     launchPlayerBtn.hidden = mode !== "web";
+
+    if (status.queued_track) {
+      const t = status.queued_track;
+      upNextLine.textContent = `Up next: ${t.artist ? `${t.artist} - ${t.song}` : t.url}`;
+      upNextLine.hidden = false;
+    } else {
+      upNextLine.hidden = true;
+    }
 
     if (status.cache_root_problem) {
       cacheWarning.textContent = `Cache folder isn't set up (${status.cache_root_problem}). See Deployment info in Settings for the configured path.`;
@@ -258,6 +269,11 @@
 
   launchPlayerBtn.addEventListener("click", () => {
     window.open(`/player?session=${encodeURIComponent(session)}`, "_blank");
+  });
+
+  djBtn.addEventListener("click", () => {
+    const url = mode === "web" ? `/dj?session=${encodeURIComponent(session)}` : "/dj";
+    window.open(url, "_blank");
   });
 
   backToSessions.addEventListener("click", (event) => {

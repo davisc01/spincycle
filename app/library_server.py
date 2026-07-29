@@ -63,6 +63,8 @@ _STATIC_FILES = {
     "/app.js": (os.path.join(_WEB_DIR, "app.js"), "application/javascript; charset=utf-8"),
     "/player": (os.path.join(_WEB_DIR, "player.html"), "text/html; charset=utf-8"),
     "/player.js": (os.path.join(_WEB_DIR, "player.js"), "application/javascript; charset=utf-8"),
+    "/dj": (os.path.join(_WEB_DIR, "dj.html"), "text/html; charset=utf-8"),
+    "/dj.js": (os.path.join(_WEB_DIR, "dj.js"), "application/javascript; charset=utf-8"),
     "/images/spin_cycle_logo_full.png": (os.path.join(_IMAGES_DIR, "spin_cycle_logo_full.png"), "image/png"),
     "/images/spin_cycle_icon_128.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_128.png"), "image/png"),
     "/images/spin_cycle_icon_256.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_256.png"), "image/png"),
@@ -254,6 +256,9 @@ class Handler(BaseHTTPRequestHandler):
             if action == "status":
                 self._handle_session_status(name)
                 return
+            if action == "tracks":
+                self._handle_session_tracks(name)
+                return
             self._send_html(404, "<h1>Not found</h1>")
             return
 
@@ -267,6 +272,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             if self._require_controller():
                 self._send_json(200, self.controller.status())
+        elif path == "/api/tracks":
+            if self._require_controller():
+                self._send_json(200, self.controller.track_list())
         elif path == "/api/library-status":
             self._send_json(200, self._library_status())
         elif path == "/api/cache-status":
@@ -294,7 +302,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self._require_session_manager():
                     self._handle_session_create()
                 return
-            if action in ("genre", "era", "skip", "stop", "video-ended", "close"):
+            if action in ("genre", "era", "skip", "stop", "queue-next", "video-ended", "close"):
                 self._handle_session_action(name, action)
                 return
             self._send_html(404, "<h1>Not found</h1>")
@@ -317,6 +325,10 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_transport(self.controller.skip if self.controller else None)
         elif path == "/api/stop":
             self._handle_transport(self.controller.stop if self.controller else None)
+        elif path == "/api/queue-next":
+            if self._require_controller():
+                if self._apply_queue_next(self.controller):
+                    self._send_json(200, self.controller.status())
         elif path == "/api/cache-root":
             self._handle_set_cache_root()
         else:
@@ -360,6 +372,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json(200, {"name": name, **controller.status()})
 
+    def _handle_session_tracks(self, name):
+        if not self._require_session_manager():
+            return
+        controller = self.session_manager.get(name)
+        if controller is None:
+            self._send_json(404, {"error": f"no such session: {name}"})
+            return
+        self._send_json(200, {"name": name, **controller.track_list()})
+
     def _handle_session_create(self):
         name, controller = self.session_manager.create()
         self._send_json(200, {"name": name, **controller.status()})
@@ -394,10 +415,31 @@ class Handler(BaseHTTPRequestHandler):
             controller.skip()
         elif action == "stop":
             controller.stop()
+        elif action == "queue-next":
+            if not self._apply_queue_next(controller):
+                return
         elif action == "video-ended":
             controller.player.mark_ended()
 
         self._send_json(200, {"name": name, **controller.status()})
+
+    def _apply_queue_next(self, controller):
+        """Reads {url} from the request body and calls
+        controller.queue_next(). Sends the error response itself and
+        returns False on failure; on success returns True and leaves the
+        success response to the caller (console vs. session routes shape
+        it differently)."""
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return False
+        try:
+            controller.queue_next(payload.get("url"))
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+            return False
+        return True
 
     def _handle_transport(self, action):
         if not self._require_controller():
