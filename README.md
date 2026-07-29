@@ -59,6 +59,14 @@ browsing. A Settings button opens the library upload/download, cache-warm
 trigger, cache-failures list, and playback log panels (see the deploy
 READMEs for how to reach the config files directly, if needed).
 
+Below Skip/Stop, a **DJ** button opens an inline panel listing every song
+in the current genre/era, sorted by artist, with the currently-playing
+track highlighted. Hit **Queue** on any song to have it play right after
+the current one -- go back and hit Skip to jump to it immediately, or just
+let the current video finish. An "Up next" line above the panel always
+shows what's coming up: whichever song you queued, or, if you haven't
+queued anything, a preview of the next randomly-shuffled pick.
+
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
 half of the match -- e.g. genre `Rock` + era `Anytime` plays all Rock
@@ -97,9 +105,12 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   pre-warm the whole library (`python3 video_cache.py`).
 - `controller.py` - `SpinCycleController`, the live playback engine behind
   the web remote: tracks the current genre/era/track, and shuffles/plays/
-  skips/stops on a background thread as selections change. Logs each
-  track play/skip/error to `config.PLAYBACK_LOG`. Intentionally decoupled
-  from `input_device.py`'s `Event` model so a future GPIO dial input could
+  skips/stops on a background thread as selections change. `queue_next(url)`
+  lets the DJ panel cut a specific track ahead of the shuffle order;
+  `track_list()` returns the current genre/era's tracks (sorted by artist)
+  for that panel, alongside what's playing/queued. Logs each track
+  play/skip/error to `config.PLAYBACK_LOG`. Intentionally decoupled from
+  `input_device.py`'s `Event` model so a future GPIO dial input could
   drive it too. Instance-scoped with no module-level globals, which is
   what lets `sessions.py` run many of them concurrently in web mode.
 - `sessions.py` - `SessionManager`, web-mode only: owns one
@@ -110,9 +121,10 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   serves `web/` (`index.html`/`style.css`/`app.js`/`player.html`/
   `player.js`), a JSON API backed by either a single `SpinCycleController`
   (console mode: `/api/status`, `/api/genre`, `/api/era`, `/api/skip`,
-  `/api/stop`) or a `SessionManager` (web mode:
-  `/api/sessions`, `/api/sessions/<name>/status`, `/api/sessions/<name>/
-  {genre,era,skip,stop,video-ended,close}`), a range-request-capable
+  `/api/stop`, `/api/tracks`, `/api/queue-next`) or a `SessionManager` (web
+  mode: `/api/sessions`, `/api/sessions/<name>/status`, `/api/sessions/
+  <name>/{genre,era,skip,stop,tracks,queue-next,video-ended,close}`) --
+  `tracks`/`queue-next` back the DJ panel -- a range-request-capable
   `/video/<file>` route serving cached videos to browser players, and the
   library-management routes (`/upload`, `/library.csv` download,
   `/warm-cache`, `/api/cache-failures` + its `/edit`/`/remove` actions).
@@ -124,9 +136,11 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   that mode).
 - `web/` - the browser UI: `index.html`/`style.css`/`app.js` (the remote --
   vanilla JS, no build step, polls `/api/status` or, in web mode, the
-  session picker + `/api/sessions/...`), and `player.html`/`player.js` (the
-  web-mode browser player, opened via "Launch Player" -- polls a session's
-  `video_url` and plays it in a `<video>` tag).
+  session picker + `/api/sessions/...`; includes the DJ panel, an inline
+  song list toggled by the DJ button rather than a separate page), and
+  `player.html`/`player.js` (the web-mode browser player, opened via
+  "Launch Player" -- polls a session's `video_url` and plays it in a
+  `<video>` tag).
 - `player.py` - `Player` (mpv subprocess wrapper: play / skip) and
   `BrowserPlayer` (web mode: blocks until the browser player tab reports
   the video ended or skip is pressed). `make_player()` picks between them
