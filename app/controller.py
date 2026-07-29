@@ -51,6 +51,8 @@ class SpinCycleController:
         self._current_track = None
         self._current_video_path = None
         self._queued_track = None
+        self._playlist = None
+        self._playlist_pos = 0
         self._status_message = "Select a genre and era to start playing."
 
         self._generation = 0
@@ -160,6 +162,8 @@ class SpinCycleController:
         self._current_track = None
         self._current_video_path = None
         self._queued_track = None
+        self._playlist = None
+        self._playlist_pos = 0
         if thread is not None and thread.is_alive():
             self.player.skip()
             # Release the lock while joining so the play loop (which takes
@@ -171,6 +175,19 @@ class SpinCycleController:
                 self._lock.acquire()
 
     # -- status ------------------------------------------------------------
+
+    def _next_track_locked(self):
+        """What will actually play after the current track: a queued
+        track if one's set, else a peek at the next not-yet-consumed item
+        in the current shuffle pass -- for the "Up next" line, which shows
+        the queued pick or, absent one, a preview of the next random song.
+        None only in the brief window between passes, right as a fresh
+        shuffle is being built (self-corrects on the next poll)."""
+        if self._queued_track is not None:
+            return self._queued_track
+        if self._playlist is not None and self._playlist_pos < len(self._playlist):
+            return self._playlist[self._playlist_pos]
+        return None
 
     def status(self):
         with self._lock:
@@ -184,6 +201,7 @@ class SpinCycleController:
                 "playing": self._playing,
                 "current_track": self._current_track,
                 "queued_track": self._queued_track,
+                "up_next": self._next_track_locked(),
                 "video_url": f"/video/{os.path.basename(self._current_video_path)}" if self._current_video_path else None,
                 "playback_mode": config.PLAYBACK_MODE,
                 "status_message": self._status_message,
@@ -192,7 +210,7 @@ class SpinCycleController:
 
     def track_list(self):
         """Every track in the current genre/era, sorted by artist then
-        song, for the DJ tab -- alongside what's currently playing/queued
+        song, for the DJ panel -- alongside what's currently playing/queued
         so it can highlight both without a second request."""
         with self._lock:
             if self._genre is None or self._era is None:
@@ -231,7 +249,10 @@ class SpinCycleController:
                     return
             playlist = tracks[:]
             random.shuffle(playlist)
-            playlist_iter = iter(playlist)
+            pos = 0
+            with self._lock:
+                self._playlist = playlist
+                self._playlist_pos = pos
 
             played_any = False
             while True:
@@ -242,15 +263,19 @@ class SpinCycleController:
                     if queued is not None:
                         self._queued_track = None
                 if queued is not None:
-                    # A track queued from the DJ tab cuts ahead of the
-                    # shuffle order without consuming it -- the iterator
-                    # picks up where it left off once this one plays.
+                    # A track queued from the DJ panel cuts ahead of the
+                    # shuffle order without consuming it -- playlist/pos
+                    # are untouched, so both the remaining shuffle order
+                    # and the "up next" preview pick up where they left
+                    # off once this one plays.
                     track = queued
                 else:
-                    try:
-                        track = next(playlist_iter)
-                    except StopIteration:
+                    if pos >= len(playlist):
                         break
+                    track = playlist[pos]
+                    pos += 1
+                    with self._lock:
+                        self._playlist_pos = pos
                 label = f"{track['artist']} - {track['song']}" if track["artist"] else track["url"]
 
                 with self._lock:
@@ -297,6 +322,15 @@ class SpinCycleController:
                         return
 
             if not played_any:
+                # A full pass just failed, so self._playlist is fully
+                # consumed (pos == len) -- "up next" would go blank for the
+                # whole backoff otherwise. Pre-shuffle a preview of the
+                # retry's pass now so there's still a best-guess answer;
+                # the retry reshuffles again for real once it actually
+                # starts (see the top of the outer loop), so this is just a
+                # placeholder in the meantime.
+                preview = tracks[:]
+                random.shuffle(preview)
                 with self._lock:
                     if not self._is_current_locked(generation):
                         return
@@ -305,5 +339,7 @@ class SpinCycleController:
                         f"(see Settings > Cache failures) -- retrying in "
                         f"{_ALL_TRACKS_FAILED_BACKOFF_SECONDS}s"
                     )
+                    self._playlist = preview
+                    self._playlist_pos = 0
                 if self._wait_or_superseded(generation, _ALL_TRACKS_FAILED_BACKOFF_SECONDS):
                     return

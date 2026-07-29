@@ -63,8 +63,6 @@ _STATIC_FILES = {
     "/app.js": (os.path.join(_WEB_DIR, "app.js"), "application/javascript; charset=utf-8"),
     "/player": (os.path.join(_WEB_DIR, "player.html"), "text/html; charset=utf-8"),
     "/player.js": (os.path.join(_WEB_DIR, "player.js"), "application/javascript; charset=utf-8"),
-    "/dj": (os.path.join(_WEB_DIR, "dj.html"), "text/html; charset=utf-8"),
-    "/dj.js": (os.path.join(_WEB_DIR, "dj.js"), "application/javascript; charset=utf-8"),
     "/images/spin_cycle_logo_full.png": (os.path.join(_IMAGES_DIR, "spin_cycle_logo_full.png"), "image/png"),
     "/images/spin_cycle_icon_128.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_128.png"), "image/png"),
     "/images/spin_cycle_icon_256.png": (os.path.join(_IMAGES_DIR, "spin_cycle_icon_256.png"), "image/png"),

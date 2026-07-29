@@ -5,6 +5,9 @@
   const skipBtn = document.getElementById("skip-btn");
   const stopBtn = document.getElementById("stop-btn");
   const djBtn = document.getElementById("dj-btn");
+  const djPanel = document.getElementById("dj-panel");
+  const djPanelStatus = document.getElementById("dj-panel-status");
+  const songList = document.getElementById("song-list");
   const upNextLine = document.getElementById("up-next-line");
   const launchPlayerBtn = document.getElementById("launch-player-btn");
   const backToSessions = document.getElementById("back-to-sessions");
@@ -176,8 +179,8 @@
     djBtn.disabled = !status.genre || !status.era;
     launchPlayerBtn.hidden = mode !== "web";
 
-    if (status.queued_track) {
-      const t = status.queued_track;
+    if (status.up_next) {
+      const t = status.up_next;
       upNextLine.textContent = `Up next: ${t.artist ? `${t.artist} - ${t.song}` : t.url}`;
       upNextLine.hidden = false;
     } else {
@@ -271,10 +274,118 @@
     window.open(`/player?session=${encodeURIComponent(session)}`, "_blank");
   });
 
+  // -- DJ panel (inline song browser/queue, toggled by the DJ button) ---
+
+  let djOpen = false;
+
+  function openDjPanel() {
+    djOpen = true;
+    djPanel.hidden = false;
+    djBtn.setAttribute("aria-expanded", "true");
+    refreshDjPanel();
+  }
+
+  function closeDjPanel() {
+    djOpen = false;
+    djPanel.hidden = true;
+    djBtn.setAttribute("aria-expanded", "false");
+  }
+
   djBtn.addEventListener("click", () => {
-    const url = mode === "web" ? `/dj?session=${encodeURIComponent(session)}` : "/dj";
-    window.open(url, "_blank");
+    if (djOpen) {
+      closeDjPanel();
+    } else {
+      openDjPanel();
+    }
   });
+
+  function trackLabel(track) {
+    return track.artist ? `${track.artist} - ${track.song}` : track.url;
+  }
+
+  function renderDjPanel(data) {
+    if (!data.tracks.length) {
+      djPanelStatus.textContent = data.genre && data.era
+        ? "No tracks in this genre/era."
+        : "Pick a genre and era to see songs here.";
+      songList.innerHTML = "";
+      return;
+    }
+    djPanelStatus.textContent = "";
+    songList.innerHTML = "";
+    for (const track of data.tracks) {
+      const li = document.createElement("li");
+      li.className = "song-item";
+      const isPlaying = data.current_track && data.current_track.url === track.url;
+      const isQueued = data.queued_track && data.queued_track.url === track.url;
+      if (isPlaying) li.classList.add("now-playing");
+      if (isQueued) li.classList.add("queued");
+
+      const info = document.createElement("div");
+      info.className = "song-info";
+      const title = document.createElement("span");
+      title.className = "song-title";
+      title.textContent = trackLabel(track);
+      const meta = document.createElement("span");
+      meta.className = "song-meta";
+      meta.textContent = `${track.genre} / ${track.era}`;
+      info.append(title, meta);
+      if (isPlaying || isQueued) {
+        const badge = document.createElement("span");
+        badge.className = "song-badge";
+        badge.textContent = isPlaying ? "Now playing" : "Up next";
+        info.append(badge);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "song-actions";
+      const queueBtn = document.createElement("button");
+      queueBtn.type = "button";
+      queueBtn.textContent = isQueued ? "Queued" : "Queue";
+      queueBtn.disabled = isQueued;
+      queueBtn.addEventListener("click", async () => {
+        queueBtn.disabled = true;
+        const result = await postJSON(actionUrl("queue-next"), { url: track.url });
+        if (!result) {
+          queueBtn.disabled = false;
+          return; // transient network hiccup -- next poll retries
+        }
+        if (result.error) {
+          alert(result.error);
+          queueBtn.disabled = false;
+          return;
+        }
+        renderStatus(result);
+        refreshDjPanel();
+      });
+      actions.appendChild(queueBtn);
+
+      li.append(info, actions);
+      songList.appendChild(li);
+    }
+  }
+
+  async function refreshDjPanel() {
+    let res;
+    try {
+      res = await fetch(actionUrl("tracks"));
+    } catch (e) {
+      return; // transient network hiccup -- just try again next poll
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      djPanelStatus.textContent = body.error || `Error: ${res.status}`;
+      songList.innerHTML = "";
+      return;
+    }
+    const data = await res.json();
+    renderDjPanel(data);
+  }
+
+  async function pollTick() {
+    await fetchStatus();
+    if (djOpen) refreshDjPanel();
+  }
 
   backToSessions.addEventListener("click", (event) => {
     event.preventDefault();
@@ -340,6 +451,7 @@
 
   function showSessionPicker() {
     session = null;
+    closeDjPanel();
     if (statusPollTimer) {
       clearInterval(statusPollTimer);
       statusPollTimer = null;
@@ -352,13 +464,14 @@
 
   function selectSession(name) {
     session = name;
+    closeDjPanel();
     sessionPicker.hidden = true;
     remote.hidden = false;
     backToSessions.hidden = false;
     history.pushState(null, "", `/?session=${encodeURIComponent(name)}`);
-    fetchStatus();
+    pollTick();
     if (statusPollTimer) clearInterval(statusPollTimer);
-    statusPollTimer = setInterval(fetchStatus, 2000);
+    statusPollTimer = setInterval(pollTick, 2000);
   }
 
   async function closeSession(name) {
@@ -545,8 +658,8 @@
       mode = "console";
       backToSessions.hidden = true;
       remote.hidden = false;
-      fetchStatus();
-      statusPollTimer = setInterval(fetchStatus, 2000);
+      pollTick();
+      statusPollTimer = setInterval(pollTick, 2000);
       return;
     }
 
