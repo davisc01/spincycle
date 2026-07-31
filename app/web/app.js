@@ -100,15 +100,35 @@
   // dial just drives it via select.value + a dispatched "change" event,
   // so it reuses the existing change listeners below rather than talking
   // to the API directly.
+  //
+  // The knob spins as a continuous, unbounded rotation (not a bounded
+  // needle-in-an-arc gauge) -- each option occupies an equal 360/count
+  // degree slice, matching the physical encoder's endless-rotation wrap
+  // (Rock -> Pop -> ... -> Anything -> back to Rock). Dragging tracks
+  // fluidly frame-by-frame; releasing with velocity coasts with friction
+  // and eases into the nearest slice. The <select> (and therefore the
+  // API commit + playback restart) only updates once a spin actually
+  // settles to rest -- not on every slice crossed mid-drag/mid-coast --
+  // so a fast flick doesn't fire a burst of genre/era changes.
 
   const DIAL_DRAG_PX_PER_STEP = 24;
-  const DIAL_SWEEP_DEG = 135; // indicator travels -135deg..+135deg
+  const DIAL_FRICTION_PER_FRAME = 0.95; // decay factor per 16.67ms (60fps) frame
+  const DIAL_VELOCITY_STOP_THRESHOLD = 0.02; // deg/ms
+  const DIAL_MAX_VELOCITY = 6; // deg/ms, clamp on release
+  const DIAL_SETTLE_MS = 200;
+  const DIAL_FRAME_DT_CLAMP_MS = 48;
+  const DIAL_BACKGROUND_GAP_MS = 250; // treat a bigger gap as a backgrounded tab
+  const DIAL_VELOCITY_SAMPLE_WINDOW_MS = 120;
 
   function createDial(select, dialEl, readoutEl) {
     const knob = dialEl.querySelector(".dial-knob");
-    const indicator = dialEl.querySelector(".dial-indicator");
     const prevBtn = dialEl.querySelector(".dial-step-prev");
     const nextBtn = dialEl.querySelector(".dial-step-next");
+
+    function sliceDeg() {
+      const count = select.options.length;
+      return count > 0 ? 360 / count : 360;
+    }
 
     function setIndex(newIndex) {
       const count = select.options.length;
@@ -119,44 +139,168 @@
       select.dispatchEvent(new Event("change"));
     }
 
-    function step(delta) {
-      setIndex(select.selectedIndex + delta);
+    let rotation = select.selectedIndex * sliceDeg(); // continuous, unbounded degrees
+    let interactionState = "idle"; // idle | dragging | coasting | settling
+    let velocity = 0; // deg/ms
+    let rafId = null;
+    let dragStartY = null;
+    let dragStartRotation = 0;
+    let dragSliceDeg = 0;
+    let moveSamples = []; // trailing window of {t, rotation}, for release velocity
+    let lastRenderedNearest = -1;
+    let settleFrom = 0;
+    let settleTo = 0;
+    let settleStart = 0;
+    let lastCoastT = null;
+
+    // Updates the visual rotation and the live readout every frame of a
+    // drag/coast/settle, without touching the <select>/committing.
+    function applyVisual(rotationValue) {
+      knob.style.setProperty("--angle", `${rotationValue}deg`);
+      const count = select.options.length;
+      if (count === 0) return;
+      const nearest = Math.round(rotationValue / sliceDeg());
+      const wrapped = ((nearest % count) + count) % count;
+      if (wrapped !== lastRenderedNearest) {
+        lastRenderedNearest = wrapped;
+        const opt = select.options[wrapped];
+        readoutEl.textContent = opt ? opt.textContent : "";
+      }
     }
 
-    prevBtn.addEventListener("click", () => step(-1));
-    nextBtn.addEventListener("click", () => step(1));
+    function commitSettledIndex() {
+      const count = select.options.length;
+      if (count === 0) return;
+      const s = sliceDeg();
+      const nearest = Math.round(rotation / s);
+      const wrapped = ((nearest % count) + count) % count;
+      setIndex(wrapped);
+      // Fold rotation back near the canonical angle (±360) so it doesn't
+      // grow unboundedly over a long session of repeated flicks.
+      rotation = wrapped * s + Math.round((rotation - wrapped * s) / 360) * 360;
+    }
+
+    function beginSettle() {
+      const s = sliceDeg();
+      const nearest = Math.round(rotation / s);
+      settleFrom = rotation;
+      settleTo = nearest * s;
+      settleStart = performance.now();
+      interactionState = "settling";
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function tick(ts) {
+      if (interactionState === "coasting") {
+        if (lastCoastT === null) lastCoastT = ts;
+        const rawDt = ts - lastCoastT;
+        lastCoastT = ts;
+        if (rawDt > DIAL_BACKGROUND_GAP_MS) {
+          velocity = 0; // tab was backgrounded -- don't fast-forward the spin
+        } else {
+          const dt = Math.min(rawDt, DIAL_FRAME_DT_CLAMP_MS);
+          rotation += velocity * dt;
+          velocity *= Math.pow(DIAL_FRICTION_PER_FRAME, dt / 16.6667);
+          applyVisual(rotation);
+        }
+        if (Math.abs(velocity) < DIAL_VELOCITY_STOP_THRESHOLD) {
+          beginSettle();
+          return;
+        }
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      if (interactionState === "settling") {
+        const t = Math.min(1, (ts - settleStart) / DIAL_SETTLE_MS);
+        const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+        rotation = settleFrom + (settleTo - settleFrom) * eased;
+        applyVisual(rotation);
+        if (t < 1) {
+          rafId = requestAnimationFrame(tick);
+          return;
+        }
+        rotation = settleTo;
+        applyVisual(rotation);
+        interactionState = "idle";
+        commitSettledIndex();
+      }
+    }
+
+    function startCoast(v) {
+      velocity = v;
+      interactionState = "coasting";
+      lastCoastT = null;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    // Used by the prev/next step buttons and mouse wheel -- a short tween
+    // through the same easing as a settle, chainable mid-flight (a new
+    // click/wheel-tick just re-tweens from wherever the last one got to).
+    function tweenToNearestPlusDelta(delta) {
+      if (select.options.length <= 1) return;
+      cancelAnimationFrame(rafId);
+      const s = sliceDeg();
+      const nearest = Math.round(rotation / s);
+      settleFrom = rotation;
+      settleTo = (nearest + delta) * s;
+      settleStart = performance.now();
+      interactionState = "settling";
+      rafId = requestAnimationFrame(tick);
+    }
+
+    prevBtn.addEventListener("click", () => tweenToNearestPlusDelta(-1));
+    nextBtn.addEventListener("click", () => tweenToNearestPlusDelta(1));
 
     let wheelAccum = 0;
     knob.addEventListener(
       "wheel",
       (event) => {
+        if (select.options.length <= 1) return;
         event.preventDefault();
         wheelAccum += event.deltaY;
         if (Math.abs(wheelAccum) >= 40) {
-          step(wheelAccum > 0 ? 1 : -1);
+          tweenToNearestPlusDelta(wheelAccum > 0 ? 1 : -1);
           wheelAccum = 0;
         }
       },
       { passive: false }
     );
 
-    let dragStartY = null;
-    let dragStartIndex = 0;
-
     knob.addEventListener("pointerdown", (event) => {
+      // Nothing to spin through yet (e.g. era before a genre is picked).
+      if (select.options.length <= 1) return;
+      cancelAnimationFrame(rafId);
+      interactionState = "dragging";
       dragStartY = event.clientY;
-      dragStartIndex = select.selectedIndex;
+      dragStartRotation = rotation; // continue from wherever a coast/settle had gotten to
+      dragSliceDeg = sliceDeg();
+      moveSamples = [{ t: event.timeStamp, rotation }];
       knob.setPointerCapture(event.pointerId);
+      event.preventDefault();
     });
 
     knob.addEventListener("pointermove", (event) => {
       if (dragStartY === null) return;
       const deltaY = dragStartY - event.clientY;
-      const steps = Math.round(deltaY / DIAL_DRAG_PX_PER_STEP);
-      if (steps !== 0) {
-        setIndex(dragStartIndex + steps);
+      rotation = dragStartRotation + deltaY * (dragSliceDeg / DIAL_DRAG_PX_PER_STEP);
+      const now = event.timeStamp;
+      moveSamples.push({ t: now, rotation });
+      while (moveSamples.length > 1 && now - moveSamples[0].t > DIAL_VELOCITY_SAMPLE_WINDOW_MS) {
+        moveSamples.shift();
       }
+      applyVisual(rotation);
     });
+
+    function computeReleaseVelocity(now) {
+      if (moveSamples.length < 2) return 0;
+      const last = moveSamples[moveSamples.length - 1];
+      if (now - last.t > 60) return 0; // paused before lifting -- not a flick
+      const first = moveSamples[0];
+      const dt = last.t - first.t;
+      if (dt < 4) return 0;
+      const v = (last.rotation - first.rotation) / dt;
+      return Math.max(-DIAL_MAX_VELOCITY, Math.min(DIAL_MAX_VELOCITY, v));
+    }
 
     function endDrag(event) {
       if (dragStartY === null) return;
@@ -164,23 +308,23 @@
       if (knob.hasPointerCapture(event.pointerId)) {
         knob.releasePointerCapture(event.pointerId);
       }
+      startCoast(computeReleaseVelocity(event.timeStamp));
     }
     knob.addEventListener("pointerup", endDrag);
     knob.addEventListener("pointercancel", endDrag);
 
     function render() {
       const count = select.options.length;
-      const index = select.selectedIndex;
-      const fraction = count > 1 ? index / (count - 1) : 0;
-      const angle = -DIAL_SWEEP_DEG + fraction * (2 * DIAL_SWEEP_DEG);
-      indicator.style.setProperty("--angle", `${angle}deg`);
-      const selectedOption = select.options[index];
-      readoutEl.textContent = selectedOption ? selectedOption.textContent : "";
-      // Only the placeholder option exists (e.g. era before a genre is
-      // picked) -- there's nothing to step through yet.
       const usable = count > 1;
       prevBtn.disabled = !usable;
       nextBtn.disabled = !usable;
+      // A poll tick rebuilds <option>s and calls render() every ~2s --
+      // only resync from the <select> while idle, or an in-progress spin
+      // would get snapped back mid-gesture.
+      if (interactionState === "idle") {
+        rotation = select.selectedIndex * sliceDeg();
+        applyVisual(rotation);
+      }
     }
 
     return { render };
