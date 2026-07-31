@@ -446,7 +446,9 @@ button:hover {
   font-size: 0.85rem;
 }
 
-.session-actions .close-session-btn {
+/* Shared "destructive" button treatment -- used by the session picker's
+   Close, and the Library panel's per-row/bulk Delete buttons. */
+.close-session-btn {
   color: var(--danger);
   border-color: var(--danger);
 }
@@ -526,64 +528,119 @@ aside h3 {
   word-break: break-word;
 }
 
-.failure-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.library-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.failure-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: rgba(10, 8, 6, 0.35);
-}
-
-.failure-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.failure-title {
-  font-weight: 600;
-}
-
-.failure-meta {
-  font-size: 0.8rem;
-  opacity: 0.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.failure-url-input {
-  width: 100%;
-  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
-  font-size: 0.8rem;
-}
-
-.failure-actions {
-  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  flex-shrink: 0;
+  align-items: center;
+  margin-bottom: 0.75rem;
 }
 
-.failure-actions button {
-  padding: 0.4rem 0.7rem;
+.library-toolbar button,
+.library-toolbar a {
+  padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
 }
 
-.failure-actions .close-session-btn {
+.library-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+#library-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+#library-table th,
+#library-table td {
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+#library-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.85;
+}
+
+#library-table thead th:last-child {
+  cursor: default;
+}
+
+.library-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.library-actions button {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.cache-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+}
+
+.cache-badge-cached {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.cache-badge-not_cached {
+  opacity: 0.65;
+}
+
+.cache-badge-failed {
+  color: var(--danger);
+  border-color: var(--danger);
+  cursor: pointer;
+}
+
+#track-form-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.track-url-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.track-url-row input {
+  flex: 1;
+}
+
+.track-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.track-form-actions button {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+#track-cancel-btn {
   color: var(--danger);
   border-color: var(--danger);
 }

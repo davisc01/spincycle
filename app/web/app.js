@@ -20,15 +20,35 @@
   const settingsToggle = document.getElementById("settings-toggle");
   const settingsPanel = document.getElementById("settings");
   const libraryStatus = document.getElementById("library-status");
-  const uploadForm = document.getElementById("upload-form");
-  const uploadResult = document.getElementById("upload-result");
   const warmStatus = document.getElementById("warm-status");
   const warmCacheBtn = document.getElementById("warm-cache-btn");
-  const cacheFailuresList = document.getElementById("cache-failures-list");
   const playbackLog = document.getElementById("playback-log");
   const cacheWarning = document.getElementById("cache-warning");
   const connectionWarning = document.getElementById("connection-warning");
   const emptyLibraryNotice = document.getElementById("empty-library-notice");
+
+  const addTrackBtn = document.getElementById("add-track-btn");
+  const importAppendBtn = document.getElementById("import-append-btn");
+  const importReplaceBtn = document.getElementById("import-replace-btn");
+  const importCsvInput = document.getElementById("import-csv-input");
+  const importResult = document.getElementById("import-result");
+  const bulkDeleteBtn = document.getElementById("bulk-delete-btn");
+  const selectAllTracks = document.getElementById("select-all-tracks");
+  const libraryTable = document.getElementById("library-table");
+  const libraryTableBody = document.getElementById("library-table-body");
+
+  const trackFormPanel = document.getElementById("track-form-panel");
+  const trackFormTitle = document.getElementById("track-form-title");
+  const trackForm = document.getElementById("track-form");
+  const trackArtist = document.getElementById("track-artist");
+  const trackSong = document.getElementById("track-song");
+  const trackGenre = document.getElementById("track-genre");
+  const trackEra = document.getElementById("track-era");
+  const trackUrl = document.getElementById("track-url");
+  const trackPreviewBtn = document.getElementById("track-preview-btn");
+  const trackSearchBtn = document.getElementById("track-search-btn");
+  const trackSearchStatus = document.getElementById("track-search-status");
+  const trackCancelBtn = document.getElementById("track-cancel-btn");
 
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
@@ -504,7 +524,7 @@
   emptyLibraryNotice.addEventListener("click", openSettings);
 
   async function refreshSettings() {
-    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshWarmStatus(), refreshCacheFailures(), refreshPlaybackLog()]);
+    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshLibraryTracks(), refreshWarmStatus(), refreshPlaybackLog()]);
   }
 
   async function refreshCacheRoot() {
@@ -518,7 +538,7 @@
     const res = await fetch("/api/library-status");
     const data = await res.json();
     libraryStatus.textContent = data.exists
-      ? `${data.size} bytes, last modified ${data.mtime}`
+      ? `${data.track_count} track(s), last modified ${data.mtime}`
       : "not found";
   }
 
@@ -536,7 +556,7 @@
       if (warmPollTimer) {
         clearInterval(warmPollTimer);
         warmPollTimer = null;
-        refreshCacheFailures();
+        refreshLibraryTracks();
         refreshPlaybackLog();
       }
     }
@@ -548,102 +568,253 @@
     playbackLog.textContent = playbackLines.length ? playbackLines.join("\n") : "(none)";
   }
 
-  async function refreshCacheFailures() {
-    const res = await fetch("/api/cache-failures");
-    const failures = await res.json();
-    renderCacheFailures(failures);
-  }
-
-  function renderCacheFailures(failures) {
-    cacheFailuresList.innerHTML = "";
-    if (!failures.length) {
-      const li = document.createElement("li");
-      li.textContent = "(none)";
-      cacheFailuresList.appendChild(li);
-      return;
-    }
-
-    for (const failure of failures) {
-      const li = document.createElement("li");
-      li.className = "failure-item";
-
-      const info = document.createElement("div");
-      info.className = "failure-info";
-      const title = document.createElement("span");
-      title.className = "failure-title";
-      title.textContent = failure.artist ? `${failure.artist} - ${failure.song}` : failure.url;
-      const meta = document.createElement("span");
-      meta.className = "failure-meta";
-      meta.textContent = `${failure.genre} / ${failure.era} — ${failure.error}`;
-      info.append(title, meta);
-
-      const urlInput = document.createElement("input");
-      urlInput.type = "text";
-      urlInput.className = "failure-url-input";
-      urlInput.value = failure.url;
-
-      const actions = document.createElement("div");
-      actions.className = "failure-actions";
-      const saveBtn = document.createElement("button");
-      saveBtn.type = "button";
-      saveBtn.textContent = "Save";
-      saveBtn.addEventListener("click", async () => {
-        const result = await postJSON("/api/cache-failures/edit", { url: failure.url, new_url: urlInput.value.trim() });
-        if (result.error) {
-          alert(result.error);
-          return;
-        }
-        renderCacheFailures(result);
-      });
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "close-session-btn";
-      removeBtn.textContent = "Remove";
-      removeBtn.addEventListener("click", async () => {
-        const label = failure.artist ? `${failure.artist} - ${failure.song}` : failure.url;
-        if (!confirm(`Permanently delete "${label}" from the library? This removes the song entirely, not just this failure notice.`)) {
-          return;
-        }
-        const result = await postJSON("/api/cache-failures/remove", { url: failure.url });
-        if (result.error) {
-          alert(result.error);
-          return;
-        }
-        renderCacheFailures(result);
-      });
-      actions.append(saveBtn, removeBtn);
-
-      li.append(info, urlInput, actions);
-      cacheFailuresList.appendChild(li);
-    }
-  }
-
-  uploadForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!confirm("Replace the entire library for everyone with this file? The current library.csv will be overwritten (a .bak copy is kept server-side, but there's no undo from this UI).")) {
-      return;
-    }
-    const formData = new FormData(uploadForm);
-    const res = await fetch("/upload", { method: "POST", body: formData });
-    const text = await res.text();
-    uploadResult.textContent = text;
-    uploadResult.style.color = res.ok ? "" : "var(--danger)";
-    if (res.ok) {
-      uploadForm.reset();
-      refreshLibraryStatus();
-      fetchStatus();
-    }
-  });
-
   warmCacheBtn.addEventListener("click", async () => {
-    // Optimistically clear right away -- the server clears its persisted
-    // failures list as soon as the run starts too (see _run_warm_cache),
-    // but that happens in a background thread, so don't wait on a fetch
-    // round-trip to race it. The poll loop below will repopulate with
-    // this run's real failures once it finishes.
-    renderCacheFailures([]);
     await fetch("/warm-cache", { method: "POST" });
     refreshWarmStatus();
+  });
+
+  // -- library table (Add/Edit/Delete/Preview, sortable columns) --------
+
+  let libraryTracks = [];
+  let librarySort = { column: "artist", dir: "asc" };
+  let selectedTrackIds = new Set();
+  let editingTrackId = null;
+  let pendingImportMode = null;
+
+  const CACHE_STATUS_LABEL = { cached: "Cached", not_cached: "Not cached", failed: "Failed" };
+
+  async function refreshLibraryTracks() {
+    const res = await fetch("/api/library-tracks");
+    libraryTracks = await res.json();
+    const liveIds = new Set(libraryTracks.map((t) => t.id));
+    for (const id of [...selectedTrackIds]) {
+      if (!liveIds.has(id)) selectedTrackIds.delete(id);
+    }
+    renderLibraryTable();
+  }
+
+  function sortedTracks() {
+    const { column, dir } = librarySort;
+    const factor = dir === "asc" ? 1 : -1;
+    return [...libraryTracks].sort((a, b) => {
+      const av = String(a[column] ?? "").toLowerCase();
+      const bv = String(b[column] ?? "").toLowerCase();
+      if (av < bv) return -1 * factor;
+      if (av > bv) return 1 * factor;
+      return 0;
+    });
+  }
+
+  function updateBulkDeleteButton() {
+    const n = selectedTrackIds.size;
+    bulkDeleteBtn.hidden = n === 0;
+    bulkDeleteBtn.textContent = `Delete selected (${n})`;
+  }
+
+  function renderLibraryTable() {
+    libraryTableBody.innerHTML = "";
+    for (const track of sortedTracks()) {
+      const tr = document.createElement("tr");
+
+      const selectTd = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = selectedTrackIds.has(track.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selectedTrackIds.add(track.id);
+        else selectedTrackIds.delete(track.id);
+        selectAllTracks.checked = libraryTracks.length > 0 && selectedTrackIds.size === libraryTracks.length;
+        updateBulkDeleteButton();
+      });
+      selectTd.appendChild(checkbox);
+
+      const artistTd = document.createElement("td");
+      artistTd.textContent = track.artist;
+      const songTd = document.createElement("td");
+      songTd.textContent = track.song;
+      const genreTd = document.createElement("td");
+      genreTd.textContent = track.genre;
+      const eraTd = document.createElement("td");
+      eraTd.textContent = track.era;
+
+      const cacheTd = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = `cache-badge cache-badge-${track.cache_status}`;
+      badge.textContent = CACHE_STATUS_LABEL[track.cache_status] || track.cache_status;
+      if (track.cache_status === "failed") {
+        badge.title = "Click for error details";
+        badge.addEventListener("click", () => alert(track.cache_error || "Unknown error"));
+      }
+      cacheTd.appendChild(badge);
+
+      const actionsTd = document.createElement("td");
+      actionsTd.className = "library-actions";
+      const previewBtn = document.createElement("button");
+      previewBtn.type = "button";
+      previewBtn.textContent = "Preview";
+      previewBtn.addEventListener("click", () => window.open(track.url, "_blank"));
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => openTrackForm("edit", track));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "close-session-btn";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", async () => {
+        const label = track.artist ? `${track.artist} - ${track.song}` : track.url;
+        if (!confirm(`Delete "${label}" from the library?`)) return;
+        const result = await postJSON(`/api/library-tracks/${track.id}/delete`, {});
+        if (result && result.error) {
+          alert(result.error);
+          return;
+        }
+        await refreshLibraryTracks();
+      });
+      actionsTd.append(previewBtn, editBtn, deleteBtn);
+
+      tr.append(selectTd, artistTd, songTd, genreTd, eraTd, cacheTd, actionsTd);
+      libraryTableBody.appendChild(tr);
+    }
+
+    selectAllTracks.checked = libraryTracks.length > 0 && selectedTrackIds.size === libraryTracks.length;
+    updateBulkDeleteButton();
+  }
+
+  libraryTable.querySelectorAll("th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const column = th.dataset.sort;
+      librarySort = librarySort.column === column
+        ? { column, dir: librarySort.dir === "asc" ? "desc" : "asc" }
+        : { column, dir: "asc" };
+      renderLibraryTable();
+    });
+  });
+
+  selectAllTracks.addEventListener("change", () => {
+    selectedTrackIds = selectAllTracks.checked ? new Set(libraryTracks.map((t) => t.id)) : new Set();
+    renderLibraryTable();
+  });
+
+  bulkDeleteBtn.addEventListener("click", async () => {
+    const n = selectedTrackIds.size;
+    if (!confirm(`Delete ${n} selected song(s) from the library?`)) return;
+    const result = await postJSON("/api/library-tracks/bulk-delete", { ids: [...selectedTrackIds] });
+    if (result && result.error) {
+      alert(result.error);
+      return;
+    }
+    selectedTrackIds.clear();
+    await refreshLibraryTracks();
+  });
+
+  // -- add/edit song form -------------------------------------------------
+
+  function openTrackForm(mode, track) {
+    editingTrackId = mode === "edit" ? track.id : null;
+    trackFormTitle.textContent = mode === "edit" ? "Edit song" : "Add song";
+    trackArtist.value = track ? track.artist : "";
+    trackSong.value = track ? track.song : "";
+    trackGenre.value = track ? track.genre : "";
+    trackEra.value = track ? track.era : "";
+    trackUrl.value = track ? track.url : "";
+    trackSearchStatus.textContent = "";
+    trackFormPanel.hidden = false;
+    trackFormPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closeTrackForm() {
+    trackFormPanel.hidden = true;
+    editingTrackId = null;
+    trackForm.reset();
+    trackSearchStatus.textContent = "";
+  }
+
+  addTrackBtn.addEventListener("click", () => openTrackForm("add", null));
+  trackCancelBtn.addEventListener("click", closeTrackForm);
+
+  trackPreviewBtn.addEventListener("click", () => {
+    const url = trackUrl.value.trim();
+    if (!url) {
+      alert("Enter a URL first.");
+      return;
+    }
+    window.open(url, "_blank");
+  });
+
+  trackSearchBtn.addEventListener("click", async () => {
+    const artist = trackArtist.value.trim();
+    const song = trackSong.value.trim();
+    if (!artist || !song) {
+      alert("Enter an artist and song first.");
+      return;
+    }
+    trackSearchStatus.textContent = "Searching YouTube...";
+    trackSearchBtn.disabled = true;
+    const result = await postJSON("/api/library-tracks/search", { artist, song });
+    trackSearchBtn.disabled = false;
+    if (!result || result.error) {
+      trackSearchStatus.textContent = (result && result.error) || "Search failed.";
+      return;
+    }
+    trackUrl.value = result.url;
+    const matchLabel = result.matched_by === "official_video" ? "official video match" : "most-viewed match";
+    trackSearchStatus.textContent = `Found: "${result.title}" (${matchLabel}) — preview it before saving.`;
+  });
+
+  trackForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = {
+      artist: trackArtist.value.trim(),
+      song: trackSong.value.trim(),
+      genre: trackGenre.value.trim(),
+      era: trackEra.value.trim(),
+      url: trackUrl.value.trim(),
+    };
+    const url = editingTrackId ? `/api/library-tracks/${editingTrackId}/update` : "/api/library-tracks";
+    const result = await postJSON(url, body);
+    if (!result || result.error) {
+      alert((result && result.error) || "Save failed.");
+      return;
+    }
+    closeTrackForm();
+    await refreshLibraryTracks();
+  });
+
+  // -- CSV import (bulk add/replace) ---------------------------------------
+
+  importAppendBtn.addEventListener("click", () => {
+    pendingImportMode = "append";
+    importCsvInput.click();
+  });
+
+  importReplaceBtn.addEventListener("click", () => {
+    pendingImportMode = "replace";
+    importCsvInput.click();
+  });
+
+  importCsvInput.addEventListener("change", async () => {
+    const file = importCsvInput.files[0];
+    const mode = pendingImportMode;
+    importCsvInput.value = "";
+    if (!file || !mode) return;
+
+    const confirmText = mode === "replace"
+      ? "Replace the entire library for everyone with this file? The current library is backed up server-side, but there's no undo from this UI."
+      : `Add every row in "${file.name}" to the current library (existing songs are kept)?`;
+    if (!confirm(confirmText)) return;
+
+    const formData = new FormData();
+    formData.append("csv", file);
+    const res = await fetch(mode === "replace" ? "/upload" : "/upload-append", { method: "POST", body: formData });
+    const text = await res.text();
+    importResult.textContent = text;
+    importResult.style.color = res.ok ? "" : "var(--danger)";
+    if (res.ok) {
+      refreshLibraryStatus();
+      refreshLibraryTracks();
+      fetchStatus();
+    }
   });
 
   // -- startup: detect console vs. web mode ------------------------------

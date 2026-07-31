@@ -13,7 +13,7 @@
 <body>
   <header>
     <img class="logo" src="/images/spin_cycle_logo_full.png" alt="Spin Cycle">
-    <button id="settings-toggle" type="button" aria-expanded="false">Settings</button>
+    <button id="settings-toggle" type="button" aria-expanded="false">Library</button>
   </header>
 
   <section id="session-picker" hidden>
@@ -77,30 +77,65 @@
   </main>
 
   <aside id="settings" hidden>
-    <h2>Settings</h2>
+    <h2>Library</h2>
 
     <section>
-      <h3>Library (config/library.csv)</h3>
-      <p class="section-hint">To add videos, download the current library.csv below, add a row per video with artist, song, genre, era, and url, then upload the edited file to replace the library.</p>
+      <h3>Tracks</h3>
+      <p class="section-hint">Add, edit, or delete songs one at a time, or use Export/Import CSV for bulk changes.</p>
       <p id="library-status"></p>
-      <a id="download-link" href="/library.csv" download="library.csv">Download current library.csv</a>
-      <form id="upload-form" method="POST" action="/upload" enctype="multipart/form-data">
-        <input type="file" name="csv" accept=".csv" required>
-        <button type="submit">Upload replacement</button>
-      </form>
-      <p id="upload-result"></p>
+
+      <div class="library-toolbar">
+        <button id="add-track-btn" type="button">+ Add song</button>
+        <a id="download-link" href="/library.csv" download="library.csv">Export CSV</a>
+        <button id="import-append-btn" type="button">Import CSV (append)</button>
+        <button id="import-replace-btn" type="button">Import CSV (replace all)</button>
+        <input id="import-csv-input" type="file" accept=".csv" hidden>
+        <button id="bulk-delete-btn" type="button" class="close-session-btn" hidden>Delete selected</button>
+      </div>
+      <p id="import-result"></p>
+
+      <div class="library-table-wrap">
+        <table id="library-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="select-all-tracks" aria-label="Select all tracks"></th>
+              <th data-sort="artist">Artist</th>
+              <th data-sort="song">Song</th>
+              <th data-sort="genre">Genre</th>
+              <th data-sort="era">Era</th>
+              <th data-sort="cache_status">Cache</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="library-table-body"></tbody>
+        </table>
+      </div>
+
+      <section id="track-form-panel" hidden>
+        <h3 id="track-form-title">Add song</h3>
+        <form id="track-form">
+          <input type="text" id="track-artist" placeholder="Artist" required>
+          <input type="text" id="track-song" placeholder="Song" required>
+          <input type="text" id="track-genre" placeholder="Genre" required>
+          <input type="text" id="track-era" placeholder="Era (e.g. 1990s)" required>
+          <div class="track-url-row">
+            <input type="text" id="track-url" placeholder="YouTube URL" required>
+            <button id="track-preview-btn" type="button">Preview</button>
+          </div>
+          <p id="track-search-status" class="section-hint"></p>
+          <div class="track-form-actions">
+            <button id="track-search-btn" type="button">Search YouTube</button>
+            <button id="track-save-btn" type="submit">Save</button>
+            <button id="track-cancel-btn" type="button">Cancel</button>
+          </div>
+        </form>
+      </section>
     </section>
 
     <section>
       <h3>Cache warming</h3>
       <p id="warm-status">Idle</p>
       <button id="warm-cache-btn" type="button">Warm cache</button>
-    </section>
-
-    <section>
-      <h3>Cache failures</h3>
-      <p class="section-hint">Tracks that failed to download during the last cache warm run. Fix the URL and save, or Remove to permanently delete the song from the library, then warm the cache again.</p>
-      <ul id="cache-failures-list" class="failure-list"></ul>
     </section>
 
     <section>

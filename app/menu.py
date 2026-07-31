@@ -15,7 +15,7 @@ from player import Player
 
 class MenuController:
     def __init__(self):
-        self.library = library.load_library(config.LIBRARY_FILE)
+        self.library = library.load_library(config.LIBRARY_DB)
         self.input = KeyboardInput()
         self.player = Player()
 

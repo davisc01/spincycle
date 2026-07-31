@@ -90,10 +90,14 @@ def _app_source_dir() -> str:
 def _seed_config(app_dir: str) -> None:
     """
     Copy the starter config/library.csv into Application Support on first
-    launch only -- never overwrites an existing one, so edits/uploads made
-    via the web remote's Settings panel survive an app update (a rebuilt
-    .app's bundled starter library.csv is replaced, but Application
-    Support isn't touched by rebuilding).
+    launch only -- never overwrites an existing one, so a real library.csv
+    already there (either a pre-SQLite install's live file, or the
+    .pre-migration.bak-style artifact left after upgrading) survives an app
+    update (a rebuilt .app's bundled starter library.csv is replaced, but
+    Application Support isn't touched by rebuilding). This seeded/existing
+    CSV is only ever a one-time migration source -- library._ensure_db()
+    imports it into library.db (the live store) the first time anything in
+    the app touches the library, and never writes to the CSV again.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     dest = CONFIG_DIR / "library.csv"
@@ -295,8 +299,8 @@ class AppDelegate(NSObject):
         self, webView, parameters, frame, completionHandler
     ):
         """
-        WKUIDelegate hook for `<input type="file">` (the Settings panel's
-        library.csv upload, see app/web/index.html) -- same story as
+        WKUIDelegate hook for `<input type="file">` (the Library panel's
+        CSV import, see app/web/index.html) -- same story as
         window.open() above: WKWebView has no built-in file picker of its
         own, so clicking "Choose File" does nothing at all without this.
 
@@ -379,7 +383,10 @@ class AppDelegate(NSObject):
         subprocess.run(["open", str(CACHE_DIR)], check=False)
 
     def revealLibrary_(self, sender):
-        subprocess.run(["open", "-R", str(CONFIG_DIR / "library.csv")], check=False)
+        # library.db is the live store (see library.py) -- it exists by the
+        # time this menu item is clickable, since main.py's startup always
+        # loads the library at least once before the app finishes launching.
+        subprocess.run(["open", "-R", str(CONFIG_DIR / "library.db")], check=False)
 
     def _build_menu(self):
         """

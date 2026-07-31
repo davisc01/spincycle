@@ -41,7 +41,7 @@ def _log_playback(line):
 
 class SpinCycleController:
     def __init__(self):
-        self.library = library.load_library(config.LIBRARY_FILE)
+        self.library = library.load_library(config.LIBRARY_DB)
         self.player = make_player()
 
         self._lock = threading.Lock()
@@ -63,7 +63,7 @@ class SpinCycleController:
 
     def reload_library(self):
         with self._lock:
-            self.library = library.load_library(config.LIBRARY_FILE)
+            self.library = library.load_library(config.LIBRARY_DB)
             genres = library.genre_options(self.library)
             if self._genre not in genres:
                 self._genre = None

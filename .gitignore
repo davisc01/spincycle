@@ -24,6 +24,13 @@ index.json
 # Per-device runtime settings (e.g. the cache root path set via the web UI)
 app/config/settings.json
 
+# The live library store (see library.py) -- generated/migrated at runtime,
+# same category as settings.json above. Also ignore the .bak copies taken
+# before every programmatic edit, and library.csv's own pre-migration
+# backup, so a real deployment's data never gets committed by accident.
+app/config/library.db
+app/config/*.bak
+
 # Deploy-target-local runtime data (e.g. fallback video cache dir when no
 # --cache-root is given to a deploy/<target>/install.sh)
 deploy/*/data/

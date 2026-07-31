@@ -32,11 +32,11 @@ web-mode session picker works.
   video cache location and bind-mount/PV that path so downloaded videos
   survive a container restart. Without a persistent volume here, every
   restart re-downloads the entire library.
-- **A persistent volume for `/app/config`** -- `library.csv` (your video
-  library) and `settings.json` (runtime settings, e.g. cache root) live
-  here. Mount this from a volume too, or edits made via the web remote's
-  Settings panel (upload/warm-cache/cache-failures edits) won't survive a
-  restart.
+- **A persistent volume for `/app/config`** -- `library.db` (your video
+  library, a local SQLite file) and `settings.json` (runtime settings, e.g.
+  cache root) live here. Mount this from a volume too, or edits made via
+  the web remote's Library panel (add/edit/delete tracks, CSV import,
+  warm-cache) won't survive a restart.
 - **Port 80** (`config.LIBRARY_SERVER_PORT`) -- the web remote and JSON
   API. No authentication -- see "Security" below before exposing this
   anywhere beyond a trusted LAN.
@@ -68,7 +68,7 @@ Roughly, you want:
   requirement, not a default to bump), exposing container port 80.
 - Two `PersistentVolumeClaim`s mounted into the pod: one at `/cache`
   (video cache -- gets large, size it for your library), one at
-  `/app/config` (small -- just `library.csv`/`settings.json`).
+  `/app/config` (small -- just `library.db`/`settings.json`).
   Any `StorageClass` your cluster provides works; there's nothing
   Spin-Cycle-specific about the storage.
 - A `Service` (ClusterIP is enough if you're fronting it with your own

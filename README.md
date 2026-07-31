@@ -59,9 +59,11 @@ confirm step, since picking from a dropdown is already a deliberate
 action. Changing either selection mid-playback re-tunes: stops the
 current video and starts the new combination. Skip moves to the next
 track without changing the selection; Stop halts playback and returns to
-browsing. A Settings button opens the library upload/download, cache-warm
-trigger, cache-failures list, and playback log panels (see the deploy
-READMEs for how to reach the config files directly, if needed).
+browsing. A Library button opens a sortable table of every track (with
+per-row Preview/Edit/Delete, an add-song form with a YouTube-search
+helper, and CSV export/import for bulk changes), plus the cache-warm
+trigger and playback log panels (see the deploy READMEs for how to reach
+the underlying data file directly, if needed).
 
 Below Skip/Stop, a **DJ** button opens an inline panel listing every song
 in the current genre/era, sorted by artist, with the currently-playing
@@ -101,15 +103,20 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   future deployment target would be a new sibling here too, rather than
   forking it.
 - `config.py` - paths, yt-dlp format string, mpv settings. Edit this first.
-- `config/library.csv` - your actual video library: artist, song, genre,
-  era, url. Easiest file to hand-edit; open it in any text editor or
-  spreadsheet app.
-- `library.py` - loads `library.csv` into the genre -> era -> tracks
+- `config/library.db` - your actual video library, a local SQLite file:
+  artist, song, genre, era, url, plus id and cache-status columns. Manage
+  it from the app's Library panel (add/edit/delete/preview per song); for
+  bulk changes, use the panel's Export/Import CSV buttons rather than
+  editing the SQLite file directly.
+- `library.py` - loads `library.db` into the genre -> era -> tracks
   structure, and resolves a genre/era pick (including the
   "Anything"/"Anytime" wildcards) into a track list. Also exposes
-  `update_url()`/`remove_by_url()` for single-row edits/deletes by URL
-  (used by the Settings panel's cache-failures list, since the CSV has no
-  other stable row id). Also runnable standalone to sanity-check the file
+  `add_track()`/`update_track()`/`delete_track()`/`delete_tracks()` for
+  CRUD by id (the library's stable row id -- unlike a CSV, duplicate URLs
+  don't cause ambiguity), and `import_csv()`/`export_csv_rows()` for bulk
+  CSV import/export. An existing `library.csv` from before this file
+  existed is imported into it automatically, once, the first time the app
+  runs. Also runnable standalone to sanity-check the library
   (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
@@ -136,14 +143,17 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   <name>/{genre,era,skip,stop,tracks,queue-next,video-ended,close}`) --
   `tracks`/`queue-next` back the DJ panel -- a range-request-capable
   `/video/<file>` route serving cached videos to browser players, and the
-  library-management routes (`/upload`, `/library.csv` download,
-  `/warm-cache`, `/api/cache-failures` + its `/edit`/`/remove` actions).
-  Each warm-cache run rewrites the cache-failures list from scratch (not
-  an append-only log), so a fixed or removed entry doesn't linger.
-  `main.py` starts it automatically in a background thread; it's also
-  runnable standalone (`python3 library_server.py`) for library
-  maintenance without full playback (the controller-backed routes 503 in
-  that mode).
+  library-management routes backing the Library panel (`/api/library-tracks`
+  for add/list, `/api/library-tracks/<id>/{update,delete}`,
+  `/api/library-tracks/bulk-delete`, `/api/library-tracks/search` for the
+  YouTube search-and-suggest helper, `/upload`/`/upload-append` for CSV
+  import, `/library.csv` for export, and `/warm-cache`). Each track's own
+  `cache_error` column reflects only its most recent warm-cache attempt, so
+  a fixed track's row stops showing "Failed" on the next run without any
+  separate cleanup step. `main.py` starts it automatically in a background
+  thread; it's also runnable standalone (`python3 library_server.py`) for
+  library maintenance without full playback (the controller-backed routes
+  503 in that mode).
 - `web/` - the browser UI: `index.html`/`style.css`/`app.js` (the remote --
   vanilla JS, no build step, polls `/api/status` or, in web mode, the
   session picker + `/api/sessions/...`; includes the DJ panel, an inline

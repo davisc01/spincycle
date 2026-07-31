@@ -73,13 +73,15 @@ quit: **Cmd-Q**, or **Spin Cycle -> Quit Spin Cycle** in the menu bar. The
 
 Unlike the Pi/container targets (bind-mounted `app/config`, a PVC), a
 packaged `.app`'s own `Contents/Resources` isn't a sensible place to keep
-a growing `library.csv` or cache -- rebuilding the app would wipe it, and
+a growing library or cache -- rebuilding the app would wipe it, and
 per-user data doesn't belong inside an app bundle at all. Instead:
 
-- `~/Library/Application Support/Spin Cycle/config/` -- `library.csv` and
-  `settings.json`. Seeded from the repo's starter library on first launch
-  only; never overwritten by a rebuild, so edits/uploads via the web
-  remote's Settings panel persist across app updates.
+- `~/Library/Application Support/Spin Cycle/config/` -- `library.db` (the
+  live library -- a local SQLite file) and `settings.json`. A starter
+  `library.csv` is seeded here on first launch only and imported into
+  `library.db` automatically; neither is ever overwritten by a rebuild, so
+  edits made via the web remote's Library panel persist across app
+  updates.
 - `~/Library/Application Support/Spin Cycle/cache/` -- the video cache.
   Gets large; same caveat as the other targets about sizing storage for
   your library.

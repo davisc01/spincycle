@@ -60,10 +60,9 @@ CACHE_ROOT = _load_settings().get("cache_root") or _DEFAULT_CACHE_ROOT
 
 
 def _recompute_cache_paths():
-    global VIDEO_DIR, INDEX_FILE, CACHE_FAILURES_FILE, PLAYBACK_LOG
+    global VIDEO_DIR, INDEX_FILE, PLAYBACK_LOG
     VIDEO_DIR = os.path.join(CACHE_ROOT, "videos")
     INDEX_FILE = os.path.join(CACHE_ROOT, "index.json")       # url -> local path map
-    CACHE_FAILURES_FILE = os.path.join(CACHE_ROOT, "cache_failures.json")  # rewritten each warm-cache run: only tracks that failed *this* run
     PLAYBACK_LOG = os.path.join(CACHE_ROOT, "playback.log")  # append-only log of track plays/skips/errors
 
 
@@ -112,6 +111,12 @@ def set_cache_root(path):
 
 
 LIBRARY_FILE = os.path.join(CONFIG_DIR, "library.csv")
+# The live library store (see library.py). LIBRARY_FILE above is kept only
+# as the one-time migration source (an existing library.csv is imported
+# into LIBRARY_DB the first time anything touches the library -- see
+# library._ensure_db()) and as the target of CSV import/export -- nothing
+# in the app writes to LIBRARY_FILE itself anymore.
+LIBRARY_DB = os.path.join(CONFIG_DIR, "library.db")
 
 # --- Playback mode ---------------------------------------------------------
 # "console" (default): mpv renders to the physical console via DRM/KMS, as

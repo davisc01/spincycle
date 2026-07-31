@@ -97,31 +97,34 @@ rather than anything `install.sh` can decide for you:
    comes up so you can fix it), and the main page shows a warning banner
    whenever the configured cache folder isn't actually usable.
 
-2. **Add your videos to `config/library.csv`.** It's a plain CSV with
-   these columns (header row required):
+2. **Add your videos.** Open the web remote's **Library** panel from any
+   browser on your LAN at `http://<pi-ip>/` (or `http://raspberrypi.local/`
+   -- Raspberry Pi OS runs Avahi/mDNS by default, so the `.local` hostname
+   resolves on the LAN without knowing the Pi's IP). It's a sortable table
+   of every track with Add/Edit/Delete/Preview per row -- adding a song
+   only needs artist/song/genre/era; a "Search YouTube" button finds and
+   fills in the URL for you (preferring an official-video result), and a
+   Preview button opens it in a new tab so you can double check before
+   saving. **No authentication** -- LAN-only, same trust level as ssh. See
+   the main [README.md](../../README.md)'s "Using the web remote" section
+   for how to drive playback once it's up.
+
+   For bulk changes, the Library panel's Export/Import CSV buttons round-
+   trip the same `artist,song,genre,era,url` format the library used to be
+   stored as directly:
    ```
    artist,song,genre,era,url
    Example Artist,Example Song,Rock,80s,https://www.youtube.com/watch?v=XXXXXXXXXXX
    ```
-   Open it in any text editor or spreadsheet app -- no need to hand-write
-   JSON structure. Rows missing a genre, era, or url are skipped with a
-   warning rather than breaking the app. A starter library of 18 well-known
-   tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s ships in the repo.
-   `install.sh` bind-mounts `app/config` into the container (rather than
-   baking it into the image), so edits here -- by hand, `git pull`, or via
-   the web UI upload below -- take effect on the next `sudo systemctl
-   restart spincycle` without rebuilding the image, and persist across
-   image rebuilds.
-
-   Instead of editing the file directly on the Pi (scp/git pull), open the
-   web remote's Settings panel from any browser on your LAN at
-   `http://<pi-ip>/` (or `http://raspberrypi.local/` -- Raspberry Pi OS
-   runs Avahi/mDNS by default, so the `.local` hostname resolves on the LAN
-   without knowing the Pi's IP) and download/upload `library.csv` from
-   there. Uploads are validated before being accepted, so a malformed CSV
-   never overwrites the live one. **No authentication** -- LAN-only, same
-   trust level as ssh. See the main [README.md](../../README.md)'s "Using
-   the web remote" section for how to drive playback once it's up.
+   Export, edit in any spreadsheet app or text editor, then re-import in
+   either "append" (adds rows, keeps the existing library) or "replace all"
+   mode -- uploads are validated before being accepted, so a malformed CSV
+   never overwrites the live library. Rows missing a genre, era, or url are
+   skipped with a warning rather than breaking the app. A starter library
+   of 18 well-known tracks across Rock/Pop/Hip-Hop and the 80s/90s/2000s
+   ships in the repo. `install.sh` bind-mounts `app/config` into the
+   container (rather than baking it into the image), so the library
+   persists across image rebuilds without any extra step.
 
 3. **(Optional but recommended) Pre-warm the cache** so party night
    doesn't depend on your internet connection:
@@ -134,13 +137,12 @@ rather than anything `install.sh` can decide for you:
    at install time). This walks the whole library and downloads anything
    not yet cached, printing progress as it goes. Safe to re-run any time
    you add new URLs -- already-cached videos are skipped instantly. The
-   web remote's Settings panel also has a "Warm cache" button that does
-   this remotely, with a live progress line and a "Cache failures" list
-   afterward -- each entry shows the artist/song/genre/era that failed
-   plus an editable URL field and a Remove button, so a bad link can be
-   fixed or dropped from `library.csv` right there without downloading
-   the whole file. The list reflects only the most recent run -- it's
-   rewritten from scratch every time, not an accumulating log.
+   web remote's Library panel also has a "Warm cache" button that does
+   this remotely, with a live progress line; any track that fails shows a
+   "Failed" badge in the table (click it for the error) so a bad link can
+   be fixed or deleted right there without downloading the whole file. That
+   badge reflects only the most recent warm-cache run for that track, not
+   an accumulating history.
 
 ## Customizing the HDMI resolution / connector
 

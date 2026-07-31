@@ -137,6 +137,52 @@ def ensure_cached(url, progress_hook=None, force=False):
         return final_path
 
 
+def search_track(artist, song, max_results=5):
+    """
+    Search YouTube for `artist song` via yt-dlp's ytsearchN: pseudo-URL
+    (no API key/account needed -- yt-dlp scrapes YouTube's own search
+    directly) and return the best-guess match: the highest-view-count
+    result whose title or description mentions "official video", or
+    failing that, the highest-view-count result overall. Raises
+    RuntimeError if the search returns no results at all.
+
+    Not `extract_flat` -- that would skip per-video metadata (description,
+    view_count) that the matching logic below needs, at the cost of a full
+    extraction pass per candidate (a few seconds for max_results=5), so
+    callers (the /api/library-tracks/search HTTP route) should treat this
+    as a slow, synchronous call and show a loading state rather than block
+    the whole server on it via some background-job mechanism (it's bounded,
+    unlike warm_cache's whole-library walk).
+    """
+    import yt_dlp
+
+    query = f"ytsearch{max_results}:{artist} {song}"
+    ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(query, download=False)
+
+    entries = [e for e in (info.get("entries") or []) if e]
+    if not entries:
+        raise RuntimeError(f"No YouTube results for {artist!r} {song!r}")
+
+    def view_count(entry):
+        return entry.get("view_count") or 0
+
+    official = [
+        e for e in entries
+        if "official video" in f"{e.get('title', '')} {e.get('description', '')}".lower()
+    ]
+    matched_by = "official_video" if official else "most_viewed"
+    best = max(official or entries, key=view_count)
+
+    return {
+        "url": best.get("webpage_url") or best.get("url"),
+        "title": best.get("title"),
+        "view_count": best.get("view_count"),
+        "matched_by": matched_by,
+    }
+
+
 def clear_incoming():
     """
     Remove any leftover partial-download files from the staging directory.
@@ -236,7 +282,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     clear_incoming()
-    lib = library_module.load_library(config.LIBRARY_FILE)
+    lib = library_module.load_library(config.LIBRARY_DB)
 
     def report(i, total, genre, era, track, err):
         label = f"{track['artist']} - {track['song']}" if track.get("artist") else track["url"]
