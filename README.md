@@ -17,13 +17,9 @@ today.
 
 ## Deployment targets
 
-Three deployment targets share one codebase ([`app/`](app/)) -- see each
-target's README for hardware requirements and setup instructions:
+This release focuses on two deployment targets, both sharing one codebase
+([`app/`](app/)) -- see each target's README for setup instructions:
 
-- **[Console (Raspberry Pi 4)](deploy/raspberrypi/README.md)** -- one
-  physical device plugged into a TV over HDMI; mpv renders straight to
-  the display via DRM/KMS, and `install.sh` sets it up as a
-  systemd-managed Podman container.
 - **[Web (container)](deploy/container/README.md)** -- run the same
   image on a home server, NAS, or Kubernetes cluster; a browser tab you
   open becomes the player instead of mpv/DRM, and it supports multiple
@@ -34,25 +30,26 @@ target's README for hardware requirements and setup instructions:
   runs on your Mac instead of a cluster, no Docker, no volumes, nothing
   to provision if you've already got a Mac.
 
+A third target, **[Console (Raspberry Pi 4)](deploy/raspberrypi/README.md)**
+-- one physical device plugged into a TV over HDMI, mpv rendering straight
+to the display via DRM/KMS -- previously shipped here and is **deferred to
+v1**. The code and installer aren't going anywhere, they're just out of
+scope for this release; see that README if you're deploying to a Pi anyway.
+
 A future deployment target (a different device, or a different install
 method) would be a new sibling under `deploy/` reusing the same `app/`
 codebase, not a fork of it.
 
 ## Using the web remote
 
-Open the app's address in a browser on your LAN -- on the console target
-that's `http://<pi-ip>/` or `http://raspberrypi.local/`; for a container
-deployment it depends on how you exposed it (see the deploy READMEs
-linked above). Works the same on desktop and mobile, no app install
-needed.
+Open the app's address in a browser on your LAN -- exactly where depends
+on how you exposed it (see the deploy READMEs linked above). Works the
+same on desktop and mobile, no app install needed.
 
-In console mode, `main.py` starts a single `SpinCycleController` and
-drives it from a genre `<select>`, an era `<select>`, and Skip/Stop
-buttons. In web mode, the landing page is a session picker instead --
-**+ New Session**, **Select** to open a session's own genre/era/skip/stop
-controls plus a **Launch Player** button, **Close** to tear one down --
-since each browser tab/device gets its own independent selection and
-player (see `sessions.py`).
+The landing page is a session picker -- **+ New Session**, **Select** to
+open a session's own genre/era/skip/stop controls plus a **Launch Player**
+button, **Close** to tear one down -- since each browser tab/device gets
+its own independent selection and player (see `sessions.py`).
 
 Picking a genre and an era starts playback automatically -- no separate
 confirm step, since picking from a dropdown is already a deliberate
@@ -82,13 +79,14 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 ## Project layout
 
 - [`app/`](app/) - the Spin Cycle codebase itself, device-agnostic. Builds
-  one container image (`app/Dockerfile`) that the Pi and container targets
-  run; the macOS target runs the same code directly (no container) via
+  one container image (`app/Dockerfile`) that the container target runs;
+  the macOS target runs the same code directly (no container) via
   `py2app`. All paths below are relative to `app/` unless noted.
 - [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` plus its
   gitignored `data/` dir (fallback cache when no `--cache-root` is given)
   -- see [`deploy/raspberrypi/README.md`](deploy/raspberrypi/README.md)
-  for hardware requirements and setup instructions.
+  for hardware requirements and setup instructions. **Deferred to v1** for
+  this release (see "Deployment targets" above) -- kept here unchanged.
 - [`deploy/container/`](deploy/container/) - see
   [`deploy/container/README.md`](deploy/container/README.md) for what the
   image expects to run as a web deployment (env vars, volumes, port) plus
@@ -176,12 +174,10 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 
 ## Why H.264, not VP9/AV1 (console mode only)
 
-The Pi 4's V4L2 M2M hardware decoder handles H.264 (and HEVC) but not
-VP9/AV1, which is what YouTube serves by default at higher resolutions.
-In console mode, `config.FORMAT_SELECTOR` forces yt-dlp to grab the H.264
-variant of each video so playback stays hardware-accelerated instead of
-falling back to slow software decode. This constraint doesn't apply to
-the container/web deployment target -- there, decoding happens client-side
-in the viewer's own browser rather than on the server, so web mode uses a
-looser selector (up to 4K, any codec) instead. See
+Console mode (the deferred-to-v1 Raspberry Pi target) forces yt-dlp to grab
+the H.264 variant of each video, since the Pi 4's hardware decoder can't
+handle VP9/AV1 -- see `config.FORMAT_SELECTOR`. Not a concern for the
+container/macOS targets this release ships: decoding happens client-side in
+the viewer's own browser, so web mode uses a looser selector (up to 4K, any
+codec) instead. See
 [`deploy/container/README.md`](deploy/container/README.md).

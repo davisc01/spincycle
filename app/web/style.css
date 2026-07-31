@@ -63,6 +63,12 @@ main, aside {
   }
 }
 
+@media (min-width: 900px) {
+  #settings {
+    max-width: 1000px;
+  }
+}
+
 main {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -565,6 +571,13 @@ aside h3 {
   border-bottom: 1px solid var(--border);
 }
 
+#library-table td.col-artist,
+#library-table td.col-song {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #library-table thead th {
   position: sticky;
   top: 0;
@@ -576,6 +589,68 @@ aside h3 {
 
 #library-table thead th:last-child {
   cursor: default;
+}
+
+.library-sort-row {
+  display: none;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.library-sort-row select {
+  flex: 1;
+}
+
+@media (max-width: 639px) {
+  .library-sort-row {
+    display: flex;
+  }
+
+  .library-table-wrap {
+    max-height: none;
+  }
+
+  #library-table thead {
+    display: none;
+  }
+
+  #library-table, #library-table tbody, #library-table tr, #library-table td {
+    display: block;
+    width: 100%;
+  }
+
+  #library-table tr {
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 0.6rem;
+  }
+
+  #library-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.3rem 0;
+    border-bottom: none;
+    white-space: normal;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  #library-table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  #library-table td.col-select {
+    justify-content: flex-start;
+  }
+
+  #library-table td.library-actions {
+    justify-content: flex-start;
+  }
 }
 
 .library-actions {

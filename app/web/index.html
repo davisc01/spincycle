@@ -94,6 +94,20 @@
       </div>
       <p id="import-result"></p>
 
+      <div class="library-sort-row">
+        <select id="library-sort-field" aria-label="Sort by">
+          <option value="artist">Artist</option>
+          <option value="song">Song</option>
+          <option value="genre">Genre</option>
+          <option value="era">Era</option>
+          <option value="cache_status">Cache</option>
+        </select>
+        <select id="library-sort-dir" aria-label="Sort direction">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </select>
+      </div>
+
       <div class="library-table-wrap">
         <table id="library-table">
           <thead>

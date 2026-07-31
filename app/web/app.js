@@ -36,6 +36,8 @@
   const selectAllTracks = document.getElementById("select-all-tracks");
   const libraryTable = document.getElementById("library-table");
   const libraryTableBody = document.getElementById("library-table-body");
+  const librarySortField = document.getElementById("library-sort-field");
+  const librarySortDir = document.getElementById("library-sort-dir");
 
   const trackFormPanel = document.getElementById("track-form-panel");
   const trackFormTitle = document.getElementById("track-form-title");
@@ -617,6 +619,7 @@
       const tr = document.createElement("tr");
 
       const selectTd = document.createElement("td");
+      selectTd.className = "col-select";
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = selectedTrackIds.has(track.id);
@@ -629,15 +632,22 @@
       selectTd.appendChild(checkbox);
 
       const artistTd = document.createElement("td");
+      artistTd.className = "col-artist";
+      artistTd.dataset.label = "Artist";
       artistTd.textContent = track.artist;
       const songTd = document.createElement("td");
+      songTd.className = "col-song";
+      songTd.dataset.label = "Song";
       songTd.textContent = track.song;
       const genreTd = document.createElement("td");
+      genreTd.dataset.label = "Genre";
       genreTd.textContent = track.genre;
       const eraTd = document.createElement("td");
+      eraTd.dataset.label = "Era";
       eraTd.textContent = track.era;
 
       const cacheTd = document.createElement("td");
+      cacheTd.dataset.label = "Cache";
       const badge = document.createElement("span");
       badge.className = `cache-badge cache-badge-${track.cache_status}`;
       badge.textContent = CACHE_STATUS_LABEL[track.cache_status] || track.cache_status;
@@ -687,8 +697,20 @@
       librarySort = librarySort.column === column
         ? { column, dir: librarySort.dir === "asc" ? "desc" : "asc" }
         : { column, dir: "asc" };
+      librarySortField.value = librarySort.column;
+      librarySortDir.value = librarySort.dir;
       renderLibraryTable();
     });
+  });
+
+  librarySortField.addEventListener("change", () => {
+    librarySort = { column: librarySortField.value, dir: librarySortDir.value };
+    renderLibraryTable();
+  });
+
+  librarySortDir.addEventListener("change", () => {
+    librarySort = { column: librarySortField.value, dir: librarySortDir.value };
+    renderLibraryTable();
   });
 
   selectAllTracks.addEventListener("change", () => {
