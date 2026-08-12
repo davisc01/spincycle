@@ -68,7 +68,7 @@ class MenuController:
                 label = f"{track['artist']} - {track['song']}" if track["artist"] else track["url"]
                 print(f"Checking cache: {label}")
                 try:
-                    local_path = video_cache.ensure_cached(track["url"])
+                    local_path = video_cache.ensure_cached(track)
                 except Exception as e:
                     print(f"  Could not fetch, skipping: {e}")
                     continue

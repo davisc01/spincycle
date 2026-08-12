@@ -75,6 +75,8 @@ def main():
     else:
         import video_cache
         video_cache.clear_incoming()
+        import library as library_module
+        video_cache.migrate_filenames(library_module.load_library(config.LIBRARY_DB))
 
     import splash
 

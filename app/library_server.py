@@ -434,9 +434,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_video(self, filename):
         """Serve a cached video file from config.VIDEO_DIR by its flat
-        <id>.mp4 filename (see video_cache.py -- no subdirectories, so
-        rejecting any '/' or '..' is enough to keep this inside
-        VIDEO_DIR). Unlike _serve_static's _send_bytes (which reads the
+        <artist>-<song>.mp4 filename (see video_cache.py -- no
+        subdirectories, so rejecting any '/' or '..' is enough to keep this
+        inside VIDEO_DIR). Unlike _serve_static's _send_bytes (which reads the
         whole file into memory -- fine for style.css, wrong for a
         multi-hundred-MB video), this streams in chunks and supports HTTP
         Range requests, which browsers commonly need for <video> seeking."""

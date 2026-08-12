@@ -116,8 +116,9 @@ def _exclude_cache_from_spotlight() -> None:
     downloaded video as it lands, which is real, measurable CPU/disk
     contention with warm-cache's own downloads that a k3s/container
     deployment never has to compete with (no Spotlight on Linux) -- and
-    there's nothing worth searching for in a folder of opaque
-    <youtube-id>.mp4 files anyway.
+    Spotlight indexing video *content* (thumbnails/metadata extraction)
+    isn't worth the cost even though the filenames themselves are now
+    human-readable (<artist>-<song>.mp4).
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     sentinel = CACHE_DIR / ".metadata_never_index"

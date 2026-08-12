@@ -8,9 +8,61 @@ every later play is instant and offline.
 """
 import json
 import os
+import re
 import threading
 
 import config
+
+_UNSAFE_CHARS = re.compile(r"[^\w\-]+", re.UNICODE)
+_MAX_COMPONENT_LEN = 100
+
+
+def _sanitize_component(text):
+    """Turn arbitrary artist/song text into a safe, readable filename
+    component: unicode letters/digits/underscore/hyphen survive as-is,
+    everything else (spaces, punctuation, path separators) collapses to a
+    single '-'. Truncated well under filesystem path limits."""
+    text = _UNSAFE_CHARS.sub("-", text.strip())
+    text = re.sub(r"-{2,}", "-", text).strip("-")
+    return text[:_MAX_COMPONENT_LEN]
+
+
+def _base_name(track):
+    parts = [_sanitize_component(track["artist"]), _sanitize_component(track["song"])]
+    return "-".join(p for p in parts if p)
+
+
+def _resolve_final_path(index, url, track, video_id):
+    """
+    Pick the on-disk filename for `track`'s cached video: <artist>-<song>.mp4
+    when that's available, falling back to <artist>-<song>-<video_id>.mp4
+    only if another URL already owns that name (or a stray same-named file
+    already exists) -- collisions should be rare, so keep names clean in
+    the common case rather than always stamping the id on. Blank
+    artist/song (schema allows empty strings) falls back to the old
+    <video_id>.mp4 scheme, which is always unique on its own.
+
+    `index` is consulted (not reloaded) so callers iterating multiple
+    tracks in one pass (migrate_filenames) see prior renames/downloads in
+    the same run and don't collide with each other.
+    """
+    base = _base_name(track)
+    if not base:
+        return os.path.join(config.VIDEO_DIR, f"{video_id}.mp4")
+
+    candidate = f"{base}.mp4"
+    candidate_path = os.path.join(config.VIDEO_DIR, candidate)
+    taken_by_other = any(
+        p == candidate_path and u != url for u, p in index.items()
+    )
+    if not taken_by_other and os.path.exists(candidate_path) and index.get(url) != candidate_path:
+        taken_by_other = True  # stray/foreign file with this name, not this url's own
+
+    if taken_by_other:
+        candidate = f"{base}-{video_id}.mp4"
+        candidate_path = os.path.join(config.VIDEO_DIR, candidate)
+
+    return candidate_path
 
 _index_lock = threading.Lock()
 
@@ -52,10 +104,12 @@ def get_cached_path(url):
     return None
 
 
-def ensure_cached(url, progress_hook=None, force=False):
+def ensure_cached(track, progress_hook=None, force=False):
     """
-    Return a local playable path for `url`, downloading it first if needed.
-    Safe to call from multiple threads/processes; index writes are locked.
+    Return a local playable path for `track`, downloading it first if
+    needed. Safe to call from multiple threads/processes; index writes are
+    locked. Takes the full track dict (not just a bare URL) because the
+    cached filename is derived from its artist/song, not just its id.
 
     `force=True` skips the already-cached check and redownloads even if an
     index entry/file already exists (e.g. after a FORMAT_SELECTOR change,
@@ -71,6 +125,7 @@ def ensure_cached(url, progress_hook=None, force=False):
     YouTube rate-limiting during a bulk forced recache) then left several
     previously-working tracks with no cached file at all.
     """
+    url = track["url"]
     if not force:
         cached = get_cached_path(url)
         if cached:
@@ -126,11 +181,22 @@ def ensure_cached(url, progress_hook=None, force=False):
         if not os.path.exists(staged_path):
             raise RuntimeError(f"yt-dlp reported success but file not found: {staged_path}")
 
-        final_path = os.path.join(config.VIDEO_DIR, os.path.basename(staged_path))
-        os.replace(staged_path, final_path)
+        video_id = info.get("id") or os.path.splitext(os.path.basename(staged_path))[0]
 
         with _index_lock:
             index = _load_index()
+            old_path = index.get(url)
+            final_path = _resolve_final_path(index, url, track, video_id)
+            os.replace(staged_path, final_path)
+            # A re-download (force=True, or a track whose artist/song was
+            # edited since it was last cached) can resolve to a different
+            # filename than before -- clean up the stale file so renamed-away
+            # downloads don't leak as orphaned disk space.
+            if old_path and old_path != final_path and os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except OSError as e:
+                    print(f"[video_cache] Could not remove stale cache file {old_path}: {e}")
             index[url] = final_path
             _save_index(index)
 
@@ -204,6 +270,47 @@ def clear_incoming():
             print(f"[video_cache] Could not remove stale incoming file {path}: {e}")
 
 
+def migrate_filenames(library):
+    """
+    Rename already-cached files (and update their index entries) to match
+    the current <artist>-<song>.mp4 naming scheme, without redownloading
+    anything -- a pure on-disk rename. Meant to run once, early, at process
+    startup (see main.py), same as clear_incoming(); idempotent and cheap
+    to call every time, since a file already on the current scheme
+    resolves to its own existing path and is left alone.
+
+    The id needed for the collision-fallback name is recovered from the
+    *current* filename rather than re-fetched from yt-dlp: every file this
+    function might encounter -- whether still on the old <id>.mp4 scheme or
+    already on <artist>-<song>-<id>.mp4 from a previous migration/collision
+    -- has the video id as its filename's final '-'-separated segment.
+    """
+    import library as library_module  # local import to avoid a cycle at module load time
+
+    with _index_lock:
+        index = _load_index()
+        changed = False
+        for track in library_module.all_tracks(library):
+            url = track["url"]
+            old_path = index.get(url)
+            if not old_path or not os.path.exists(old_path):
+                continue
+            video_id = os.path.splitext(os.path.basename(old_path))[0].rsplit("-", 1)[-1]
+            new_path = _resolve_final_path(index, url, track, video_id)
+            if new_path == old_path:
+                continue
+            try:
+                os.replace(old_path, new_path)
+            except OSError as e:
+                print(f"[video_cache] Could not migrate {old_path} -> {new_path}: {e}")
+                continue
+            index[url] = new_path
+            changed = True
+
+        if changed:
+            _save_index(index)
+
+
 def prune(library):
     """
     Remove cached video files (and their index entries) for URLs no longer
@@ -260,7 +367,7 @@ def warm_cache(library, on_progress=None, force=False):
     total = len(entries)
     for i, (genre, era, track) in enumerate(entries, start=1):
         try:
-            ensure_cached(track["url"], force=force)
+            ensure_cached(track, force=force)
             if on_progress:
                 on_progress(i, total, genre, era, track, None)
         except Exception as e:

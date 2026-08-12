@@ -281,7 +281,7 @@ class SpinCycleController:
                 with self._lock:
                     self._status_message = f"loading: {label}"
                 try:
-                    local_path = video_cache.ensure_cached(track["url"])
+                    local_path = video_cache.ensure_cached(track)
                 except Exception as e:
                     _log_playback(f"CACHE MISS  {genre} / {era}  {label}  ERROR: {e}")
                     with self._lock:
