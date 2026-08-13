@@ -15,6 +15,7 @@ import random
 import threading
 import time
 from datetime import datetime
+from urllib.parse import quote
 
 import config
 import library
@@ -202,7 +203,7 @@ class SpinCycleController:
                 "current_track": self._current_track,
                 "queued_track": self._queued_track,
                 "up_next": self._next_track_locked(),
-                "video_url": f"/video/{os.path.basename(self._current_video_path)}" if self._current_video_path else None,
+                "video_url": f"/video/{quote(os.path.basename(self._current_video_path))}" if self._current_video_path else None,
                 "playback_mode": config.PLAYBACK_MODE,
                 "status_message": self._status_message,
                 "cache_root_problem": config.cache_root_problem(),

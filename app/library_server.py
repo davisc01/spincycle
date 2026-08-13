@@ -36,6 +36,7 @@ import shutil
 import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote
 
 import config
 import library
@@ -232,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in _STATIC_FILES:
             self._serve_static(path)
         elif path.startswith("/video/"):
-            self._serve_video(path[len("/video/"):])
+            self._serve_video(unquote(path[len("/video/"):]))
         elif path == "/library.csv":
             self._handle_download_csv()
         elif path == "/api/status":
@@ -434,7 +435,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_video(self, filename):
         """Serve a cached video file from config.VIDEO_DIR by its flat
-        <artist>-<song>.mp4 filename (see video_cache.py -- no
+"Artist - Song Title.mp4" filename (see video_cache.py -- no
         subdirectories, so rejecting any '/' or '..' is enough to keep this
         inside VIDEO_DIR). Unlike _serve_static's _send_bytes (which reads the
         whole file into memory -- fine for style.css, wrong for a

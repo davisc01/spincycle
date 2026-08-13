@@ -6,6 +6,7 @@ This module is responsible for turning a URL into a local, hardware-decodable
 file the first time it's needed, and remembering that mapping afterward so
 every later play is instant and offline.
 """
+import hashlib
 import json
 import os
 import re
@@ -13,33 +14,56 @@ import threading
 
 import config
 
-_UNSAFE_CHARS = re.compile(r"[^\w\-]+", re.UNICODE)
+# Path separators, null/control bytes, and the handful of characters that
+# are reserved or awkward across POSIX/macOS filesystems -- everything else
+# (spaces, punctuation, unicode letters) survives as-is so a filename reads
+# as the actual artist/song text rather than a slug.
+_UNSAFE_CHARS = re.compile(r'[\x00-\x1f\x7f/\\:*?"<>|]')
 _MAX_COMPONENT_LEN = 100
+
+# Recovers a YouTube video id straight from the URL, so migrate_filenames
+# never has to depend on what a file happens to be named right now (which,
+# once cache files are renamed away from the old <id>.mp4 scheme, no longer
+# reliably encodes the id at all). Falls back to a stable hash for any URL
+# shape this doesn't recognize.
+_YOUTUBE_ID_RE = re.compile(
+    r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})"
+)
+
+
+def _video_id_for_url(url):
+    match = _YOUTUBE_ID_RE.search(url)
+    if match:
+        return match.group(1)
+    return hashlib.md5(url.encode("utf-8")).hexdigest()[:11]
 
 
 def _sanitize_component(text):
-    """Turn arbitrary artist/song text into a safe, readable filename
-    component: unicode letters/digits/underscore/hyphen survive as-is,
-    everything else (spaces, punctuation, path separators) collapses to a
-    single '-'. Truncated well under filesystem path limits."""
-    text = _UNSAFE_CHARS.sub("-", text.strip())
-    text = re.sub(r"-{2,}", "-", text).strip("-")
+    """Turn arbitrary artist/song text into a safe filename component:
+    strip characters that are unsafe/reserved on the filesystem, collapse
+    whitespace, trim edge whitespace/dots. Truncated well under filesystem
+    path limits."""
+    text = _UNSAFE_CHARS.sub(" ", text.strip())
+    text = re.sub(r"\s+", " ", text).strip(" .")
     return text[:_MAX_COMPONENT_LEN]
 
 
 def _base_name(track):
-    parts = [_sanitize_component(track["artist"]), _sanitize_component(track["song"])]
-    return "-".join(p for p in parts if p)
+    artist = _sanitize_component(track["artist"])
+    song = _sanitize_component(track["song"])
+    if artist and song:
+        return f"{artist} - {song}"
+    return artist or song
 
 
 def _resolve_final_path(index, url, track, video_id):
     """
-    Pick the on-disk filename for `track`'s cached video: <artist>-<song>.mp4
-    when that's available, falling back to <artist>-<song>-<video_id>.mp4
-    only if another URL already owns that name (or a stray same-named file
-    already exists) -- collisions should be rare, so keep names clean in
-    the common case rather than always stamping the id on. Blank
-    artist/song (schema allows empty strings) falls back to the old
+    Pick the on-disk filename for `track`'s cached video: "Artist - Song
+    Title.mp4" when that's available, falling back to "Artist - Song Title
+    (video_id).mp4" only if another URL already owns that name (or a stray
+    same-named file already exists) -- collisions should be rare, so keep
+    names clean in the common case rather than always stamping the id on.
+    Blank artist/song (schema allows empty strings) falls back to the old
     <video_id>.mp4 scheme, which is always unique on its own.
 
     `index` is consulted (not reloaded) so callers iterating multiple
@@ -59,7 +83,7 @@ def _resolve_final_path(index, url, track, video_id):
         taken_by_other = True  # stray/foreign file with this name, not this url's own
 
     if taken_by_other:
-        candidate = f"{base}-{video_id}.mp4"
+        candidate = f"{base} ({video_id}).mp4"
         candidate_path = os.path.join(config.VIDEO_DIR, candidate)
 
     return candidate_path
@@ -273,17 +297,19 @@ def clear_incoming():
 def migrate_filenames(library):
     """
     Rename already-cached files (and update their index entries) to match
-    the current <artist>-<song>.mp4 naming scheme, without redownloading
-    anything -- a pure on-disk rename. Meant to run once, early, at process
-    startup (see main.py), same as clear_incoming(); idempotent and cheap
-    to call every time, since a file already on the current scheme
-    resolves to its own existing path and is left alone.
+    the current "Artist - Song Title.mp4" naming scheme, without
+    redownloading anything -- a pure on-disk rename. Meant to run once,
+    early, at process startup (see main.py), same as clear_incoming();
+    idempotent and cheap to call every time, since a file already on the
+    current scheme resolves to its own existing path and is left alone.
 
     The id needed for the collision-fallback name is recovered from the
-    *current* filename rather than re-fetched from yt-dlp: every file this
-    function might encounter -- whether still on the old <id>.mp4 scheme or
-    already on <artist>-<song>-<id>.mp4 from a previous migration/collision
-    -- has the video id as its filename's final '-'-separated segment.
+    URL itself (_video_id_for_url), not the current filename -- once a
+    file's on the "Artist - Song Title.mp4" scheme its name no longer
+    encodes the id at all, so a filename-based lookup would only work on
+    the very first migration off the old <id>.mp4 scheme, not on any
+    collision introduced by a later run (e.g. two tracks whose artist/song
+    text only started colliding after one of them was edited).
     """
     import library as library_module  # local import to avoid a cycle at module load time
 
@@ -295,7 +321,7 @@ def migrate_filenames(library):
             old_path = index.get(url)
             if not old_path or not os.path.exists(old_path):
                 continue
-            video_id = os.path.splitext(os.path.basename(old_path))[0].rsplit("-", 1)[-1]
+            video_id = _video_id_for_url(url)
             new_path = _resolve_final_path(index, url, track, video_id)
             if new_path == old_path:
                 continue
