@@ -69,6 +69,32 @@
     #track-overlay.shown {
       opacity: 1;
     }
+    #top-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      font: 600 20px system-ui, -apple-system, sans-serif;
+      color: #39ff8a;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      background: linear-gradient(rgba(0, 0, 0, 0.75), transparent);
+      pointer-events: none;
+    }
+    #top-overlay.shown {
+      display: flex;
+    }
+    #top-overlay-logo {
+      max-height: 48px;
+      max-width: 30vw;
+      display: block;
+    }
+    #top-overlay-logo[hidden] {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -76,6 +102,10 @@
   <button id="tap-to-play" type="button"><span>&#9654; Click to start playback</span></button>
   <div id="overlay"></div>
   <div id="track-overlay"></div>
+  <div id="top-overlay">
+    <img id="top-overlay-logo" alt="">
+    <span id="top-overlay-phrase"></span>
+  </div>
   <script src="/player.js"></script>
 </body>
 </html>
