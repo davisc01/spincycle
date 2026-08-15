@@ -20,7 +20,12 @@
     <h2>Sessions</h2>
     <p class="section-hint">Each session has its own player -- create one per person/device, or jump back into one already running.</p>
     <ul id="session-list"></ul>
-    <button id="new-session-btn" type="button">+ New Session</button>
+    <div class="new-session-row">
+      <select id="new-session-playlist" aria-label="Start from playlist">
+        <option value="">Whole library</option>
+      </select>
+      <button id="new-session-btn" type="button">+ New Session</button>
+    </div>
   </section>
 
   <main id="remote" hidden>
@@ -109,7 +114,7 @@
       </div>
 
       <div class="library-table-wrap">
-        <table id="library-table">
+        <table class="data-table" id="library-table">
           <thead>
             <tr>
               <th><input type="checkbox" id="select-all-tracks" aria-label="Select all tracks"></th>
@@ -143,6 +148,43 @@
             <button id="track-cancel-btn" type="button">Cancel</button>
           </div>
         </form>
+      </section>
+    </section>
+
+    <section>
+      <h3>Playlists</h3>
+      <p class="section-hint">Filter the library, check off songs, and save them as a playlist you can start a session from.</p>
+      <div class="library-toolbar">
+        <button id="new-playlist-btn" type="button">+ New playlist</button>
+      </div>
+      <ul id="playlist-list"></ul>
+
+      <section id="playlist-builder-panel" hidden>
+        <h3 id="playlist-builder-title">New playlist</h3>
+        <input type="text" id="playlist-name-input" placeholder="Playlist name" required>
+        <div class="library-sort-row">
+          <select id="playlist-genre-filter" aria-label="Filter by genre"></select>
+          <select id="playlist-era-filter" aria-label="Filter by era"></select>
+        </div>
+        <div class="library-table-wrap">
+          <table class="data-table" id="playlist-track-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="playlist-select-all" aria-label="Select all"></th>
+                <th>Artist</th>
+                <th>Song</th>
+                <th>Genre</th>
+                <th>Era</th>
+              </tr>
+            </thead>
+            <tbody id="playlist-track-table-body"></tbody>
+          </table>
+        </div>
+        <div class="track-form-actions">
+          <button id="playlist-save-btn" type="button">Save playlist</button>
+          <button id="playlist-cancel-btn" type="button">Cancel</button>
+          <button id="playlist-delete-btn" type="button" class="close-session-btn" hidden>Delete playlist</button>
+        </div>
       </section>
     </section>
 

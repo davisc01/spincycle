@@ -40,10 +40,12 @@ class SessionManager:
         self._lock = threading.Lock()
         self._sessions = {}  # name -> SpinCycleController
 
-    def create(self):
+    def create(self, initial_library=None, playlist_id=None, playlist_name=None):
         with self._lock:
             name = self._unique_name_locked()
-            controller = SpinCycleController()
+            controller = SpinCycleController(
+                initial_library=initial_library, playlist_id=playlist_id, playlist_name=playlist_name,
+            )
             self._sessions[name] = controller
             return name, controller
 

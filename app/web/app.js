@@ -15,6 +15,7 @@
   const sessionPicker = document.getElementById("session-picker");
   const sessionList = document.getElementById("session-list");
   const newSessionBtn = document.getElementById("new-session-btn");
+  const newSessionPlaylist = document.getElementById("new-session-playlist");
   const remote = document.getElementById("remote");
 
   const settingsToggle = document.getElementById("settings-toggle");
@@ -51,6 +52,19 @@
   const trackSearchBtn = document.getElementById("track-search-btn");
   const trackSearchStatus = document.getElementById("track-search-status");
   const trackCancelBtn = document.getElementById("track-cancel-btn");
+
+  const newPlaylistBtn = document.getElementById("new-playlist-btn");
+  const playlistList = document.getElementById("playlist-list");
+  const playlistBuilderPanel = document.getElementById("playlist-builder-panel");
+  const playlistBuilderTitle = document.getElementById("playlist-builder-title");
+  const playlistNameInput = document.getElementById("playlist-name-input");
+  const playlistGenreFilter = document.getElementById("playlist-genre-filter");
+  const playlistEraFilter = document.getElementById("playlist-era-filter");
+  const playlistSelectAll = document.getElementById("playlist-select-all");
+  const playlistTrackTableBody = document.getElementById("playlist-track-table-body");
+  const playlistSaveBtn = document.getElementById("playlist-save-btn");
+  const playlistCancelBtn = document.getElementById("playlist-cancel-btn");
+  const playlistDeleteBtn = document.getElementById("playlist-delete-btn");
 
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
@@ -579,11 +593,12 @@
       name.textContent = s.name;
       const meta = document.createElement("span");
       meta.className = "session-meta";
-      meta.textContent = s.playing
+      const baseMeta = s.playing
         ? s.status_message
         : s.genre || s.era
         ? `${s.genre || "Anything"} / ${s.era || "Anytime"}`
         : "idle";
+      meta.textContent = s.playlist_name ? `Playlist: ${s.playlist_name} — ${baseMeta}` : baseMeta;
       info.append(name, meta);
 
       const actions = document.createElement("div");
@@ -608,10 +623,34 @@
     const res = await fetch("/api/sessions");
     const sessions = await res.json();
     renderSessionList(sessions);
+    refreshPlaylistPicker();
+  }
+
+  async function refreshPlaylistPicker() {
+    const res = await fetch("/api/playlists");
+    const playlists = await res.json();
+    const selected = newSessionPlaylist.value;
+    newSessionPlaylist.innerHTML = "";
+    const whole = document.createElement("option");
+    whole.value = "";
+    whole.textContent = "Whole library";
+    newSessionPlaylist.appendChild(whole);
+    for (const p of playlists) {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.track_count})`;
+      newSessionPlaylist.appendChild(opt);
+    }
+    newSessionPlaylist.value = selected;
   }
 
   newSessionBtn.addEventListener("click", async () => {
-    const created = await postJSON("/api/sessions");
+    const playlistId = newSessionPlaylist.value;
+    const created = await postJSON("/api/sessions", { playlist_id: playlistId ? Number(playlistId) : null });
+    if (!created || created.error) {
+      alert((created && created.error) || "Could not start session.");
+      return;
+    }
     selectSession(created.name);
   });
 
@@ -670,7 +709,7 @@
   emptyLibraryNotice.addEventListener("click", openSettings);
 
   async function refreshSettings() {
-    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshLibraryTracks(), refreshWarmStatus(), refreshPlaybackLog()]);
+    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshLibraryTracks(), refreshWarmStatus(), refreshPlaybackLog(), refreshPlaylists()]);
   }
 
   async function refreshCacheRoot() {
@@ -872,6 +911,195 @@
     }
     selectedTrackIds.clear();
     await refreshLibraryTracks();
+  });
+
+  // -- playlists (filter the library, check off songs, save/start from) -
+
+  let playlists = [];
+  let playlistSelectedIds = new Set();
+  let editingPlaylistId = null;
+
+  async function refreshPlaylists() {
+    const res = await fetch("/api/playlists");
+    playlists = await res.json();
+    renderPlaylistList();
+  }
+
+  function renderPlaylistList() {
+    playlistList.innerHTML = "";
+    if (!playlists.length) {
+      const li = document.createElement("li");
+      li.textContent = "(none)";
+      playlistList.appendChild(li);
+      return;
+    }
+    for (const p of playlists) {
+      const li = document.createElement("li");
+      li.className = "session-item";
+
+      const info = document.createElement("div");
+      info.className = "session-info";
+      const name = document.createElement("span");
+      name.className = "session-name";
+      name.textContent = p.name;
+      const meta = document.createElement("span");
+      meta.className = "session-meta";
+      meta.textContent = `${p.track_count} song(s)`;
+      info.append(name, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "session-actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => openPlaylistBuilder("edit", p));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "close-session-btn";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => deletePlaylist(p.id, p.name));
+      actions.append(editBtn, deleteBtn);
+
+      li.append(info, actions);
+      playlistList.appendChild(li);
+    }
+  }
+
+  async function deletePlaylist(id, name) {
+    if (!confirm(`Delete playlist "${name}"? Sessions already running from it are unaffected.`)) return;
+    const result = await postJSON(`/api/playlists/${id}/delete`, {});
+    if (result && result.error) {
+      alert(result.error);
+      return;
+    }
+    if (editingPlaylistId === id) closePlaylistBuilder();
+    await refreshPlaylists();
+  }
+
+  function populatePlaylistFilters() {
+    const genres = [...new Set(libraryTracks.map((t) => t.genre))].sort((a, b) => a.localeCompare(b));
+    fillOptions(playlistGenreFilter, genres, playlistGenreFilter.value, "All genres");
+    const eraSource = playlistGenreFilter.value
+      ? libraryTracks.filter((t) => t.genre === playlistGenreFilter.value)
+      : libraryTracks;
+    const eras = [...new Set(eraSource.map((t) => t.era))].sort((a, b) => a.localeCompare(b));
+    fillOptions(playlistEraFilter, eras, playlistEraFilter.value, "All eras");
+  }
+
+  function filteredPlaylistTracks() {
+    const genre = playlistGenreFilter.value;
+    const era = playlistEraFilter.value;
+    return libraryTracks.filter((t) => (!genre || t.genre === genre) && (!era || t.era === era));
+  }
+
+  function renderPlaylistTrackTable() {
+    const filtered = filteredPlaylistTracks();
+    playlistTrackTableBody.innerHTML = "";
+    for (const track of filtered) {
+      const tr = document.createElement("tr");
+
+      const selectTd = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = playlistSelectedIds.has(track.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) playlistSelectedIds.add(track.id);
+        else playlistSelectedIds.delete(track.id);
+        playlistSelectAll.checked = filtered.length > 0 && filtered.every((t) => playlistSelectedIds.has(t.id));
+      });
+      selectTd.appendChild(checkbox);
+
+      const artistTd = document.createElement("td");
+      artistTd.dataset.label = "Artist";
+      artistTd.textContent = track.artist;
+      const songTd = document.createElement("td");
+      songTd.dataset.label = "Song";
+      songTd.textContent = track.song;
+      const genreTd = document.createElement("td");
+      genreTd.dataset.label = "Genre";
+      genreTd.textContent = track.genre;
+      const eraTd = document.createElement("td");
+      eraTd.dataset.label = "Era";
+      eraTd.textContent = track.era;
+
+      tr.append(selectTd, artistTd, songTd, genreTd, eraTd);
+      playlistTrackTableBody.appendChild(tr);
+    }
+    playlistSelectAll.checked = filtered.length > 0 && filtered.every((t) => playlistSelectedIds.has(t.id));
+  }
+
+  async function openPlaylistBuilder(mode, playlist) {
+    editingPlaylistId = mode === "edit" ? playlist.id : null;
+    playlistBuilderTitle.textContent = mode === "edit" ? "Edit playlist" : "New playlist";
+    playlistNameInput.value = playlist ? playlist.name : "";
+    playlistDeleteBtn.hidden = mode !== "edit";
+    playlistSelectedIds = new Set();
+    playlistGenreFilter.innerHTML = "";
+    playlistEraFilter.innerHTML = "";
+    populatePlaylistFilters();
+
+    if (mode === "edit") {
+      const res = await fetch(`/api/playlists/${playlist.id}/tracks`);
+      const tracks = await res.json();
+      playlistSelectedIds = new Set(tracks.map((t) => t.id));
+    }
+
+    renderPlaylistTrackTable();
+    playlistBuilderPanel.hidden = false;
+    playlistBuilderPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closePlaylistBuilder() {
+    playlistBuilderPanel.hidden = true;
+    editingPlaylistId = null;
+    playlistSelectedIds = new Set();
+    playlistNameInput.value = "";
+  }
+
+  newPlaylistBtn.addEventListener("click", () => openPlaylistBuilder("add", null));
+  playlistCancelBtn.addEventListener("click", closePlaylistBuilder);
+
+  playlistGenreFilter.addEventListener("change", () => {
+    populatePlaylistFilters();
+    renderPlaylistTrackTable();
+  });
+  playlistEraFilter.addEventListener("change", renderPlaylistTrackTable);
+
+  playlistSelectAll.addEventListener("change", () => {
+    const filtered = filteredPlaylistTracks();
+    for (const t of filtered) {
+      if (playlistSelectAll.checked) playlistSelectedIds.add(t.id);
+      else playlistSelectedIds.delete(t.id);
+    }
+    renderPlaylistTrackTable();
+  });
+
+  playlistSaveBtn.addEventListener("click", async () => {
+    const name = playlistNameInput.value.trim();
+    if (!name) {
+      alert("Enter a playlist name.");
+      return;
+    }
+    const trackIds = [...playlistSelectedIds];
+    let result;
+    if (editingPlaylistId) {
+      result = await postJSON(`/api/playlists/${editingPlaylistId}/rename`, { name });
+      if (result && !result.error) {
+        result = await postJSON(`/api/playlists/${editingPlaylistId}/update-tracks`, { track_ids: trackIds });
+      }
+    } else {
+      result = await postJSON("/api/playlists", { name, track_ids: trackIds });
+    }
+    if (!result || result.error) {
+      alert((result && result.error) || "Save failed.");
+      return;
+    }
+    closePlaylistBuilder();
+    await refreshPlaylists();
+  });
+
+  playlistDeleteBtn.addEventListener("click", () => {
+    if (editingPlaylistId) deletePlaylist(editingPlaylistId, playlistNameInput.value.trim());
   });
 
   // -- add/edit song form -------------------------------------------------

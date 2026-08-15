@@ -41,8 +41,17 @@ def _log_playback(line):
 
 
 class SpinCycleController:
-    def __init__(self):
-        self.library = library.load_library(config.LIBRARY_DB)
+    def __init__(self, initial_library=None, playlist_id=None, playlist_name=None):
+        # initial_library, if given, is a pre-filtered {genre: {era:
+        # [tracks]}} dict (see library.library_for_playlist()) scoping
+        # this controller to a saved playlist instead of the whole
+        # library -- the caller (library_server.py) is responsible for
+        # computing it; every playback code path below just reads
+        # self.library and doesn't know or care whether it's the whole
+        # library or a filtered subset.
+        self.library = initial_library if initial_library is not None else library.load_library(config.LIBRARY_DB)
+        self._playlist_id = playlist_id
+        self._playlist_name = playlist_name
         self.player = make_player()
 
         self._lock = threading.Lock()
@@ -64,7 +73,10 @@ class SpinCycleController:
 
     def reload_library(self):
         with self._lock:
-            self.library = library.load_library(config.LIBRARY_DB)
+            if self._playlist_id is not None:
+                self.library = library.library_for_playlist(config.LIBRARY_DB, self._playlist_id)
+            else:
+                self.library = library.load_library(config.LIBRARY_DB)
             genres = library.genre_options(self.library)
             if self._genre not in genres:
                 self._genre = None
@@ -207,6 +219,7 @@ class SpinCycleController:
                 "playback_mode": config.PLAYBACK_MODE,
                 "status_message": self._status_message,
                 "cache_root_problem": config.cache_root_problem(),
+                "playlist_name": self._playlist_name,
             }
 
     def track_list(self):

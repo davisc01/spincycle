@@ -455,6 +455,16 @@ button:hover {
   font-size: 0.85rem;
 }
 
+.new-session-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.new-session-row select {
+  flex: 1;
+}
+
 /* Shared "destructive" button treatment -- used by the session picker's
    Close, and the Library panel's per-row/bulk Delete buttons. */
 .close-session-btn {
@@ -560,28 +570,28 @@ aside h3 {
   border-radius: 0.5rem;
 }
 
-#library-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
 }
 
-#library-table th,
-#library-table td {
+.data-table th,
+.data-table td {
   padding: 0.5rem 0.6rem;
   text-align: left;
   white-space: nowrap;
   border-bottom: 1px solid var(--border);
 }
 
-#library-table td.col-artist,
-#library-table td.col-song {
+.data-table td.col-artist,
+.data-table td.col-song {
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-#library-table thead th {
+.data-table thead th {
   position: sticky;
   top: 0;
   background: var(--bg);
@@ -590,7 +600,7 @@ aside h3 {
   opacity: 0.85;
 }
 
-#library-table thead th:last-child {
+.data-table thead th:last-child {
   cursor: default;
 }
 
@@ -613,21 +623,21 @@ aside h3 {
     max-height: none;
   }
 
-  #library-table thead {
+  .data-table thead {
     display: none;
   }
 
-  #library-table, #library-table tbody, #library-table tr, #library-table td {
+  .data-table, .data-table tbody, .data-table tr, .data-table td {
     display: block;
     width: 100%;
   }
 
-  #library-table tr {
+  .data-table tr {
     border-bottom: 1px solid var(--border);
     padding: 0.5rem 0.6rem;
   }
 
-  #library-table td {
+  .data-table td {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -640,23 +650,23 @@ aside h3 {
     text-overflow: clip;
   }
 
-  #library-table td[data-label]::before {
+  .data-table td[data-label]::before {
     content: attr(data-label);
     font-weight: 600;
     opacity: 0.7;
     flex-shrink: 0;
   }
 
-  #library-table td.col-select {
+  .data-table td.col-select {
     justify-content: flex-start;
   }
 
-  #library-table td.library-actions {
+  .data-table td.library-actions {
     justify-content: flex-start;
   }
 
-  #library-table td.col-artist,
-  #library-table td.col-song {
+  .data-table td.col-artist,
+  .data-table td.col-song {
     text-align: right;
   }
 }

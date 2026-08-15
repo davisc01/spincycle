@@ -229,6 +229,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(404, "<h1>Not found</h1>")
             return
 
+        playlist_route = self._playlist_route()
+        if playlist_route is not None:
+            playlist_id, action = playlist_route
+            if playlist_id is None:
+                self._send_json(200, library.list_playlists(config.LIBRARY_DB))
+                return
+            if action == "tracks":
+                self._handle_playlist_tracks(playlist_id)
+                return
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+
         path = self.path_no_query
         if path in _STATIC_FILES:
             self._serve_static(path)
@@ -278,6 +290,24 @@ class Handler(BaseHTTPRequestHandler):
         track_route = self._library_track_route()
         if track_route is not None:
             self._dispatch_library_track_post(track_route)
+            return
+
+        playlist_route = self._playlist_route()
+        if playlist_route is not None:
+            playlist_id, action = playlist_route
+            if playlist_id is None:
+                self._handle_playlist_create()
+                return
+            if action == "rename":
+                self._handle_playlist_rename(playlist_id)
+                return
+            if action == "update-tracks":
+                self._handle_playlist_update_tracks(playlist_id)
+                return
+            if action == "delete":
+                self._handle_playlist_delete(playlist_id)
+                return
+            self._send_html(404, "<h1>Not found</h1>")
             return
 
         path = self.path_no_query
@@ -352,7 +382,27 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, {"name": name, **controller.track_list()})
 
     def _handle_session_create(self):
-        name, controller = self.session_manager.create()
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        playlist_id = payload.get("playlist_id")
+        if playlist_id:
+            playlist = library.get_playlist(config.LIBRARY_DB, playlist_id)
+            if playlist is None:
+                self._send_json(404, {"error": f"no such playlist: {playlist_id}"})
+                return
+            initial_library = library.library_for_playlist(config.LIBRARY_DB, playlist_id)
+            if not initial_library:
+                self._send_json(400, {"error": "this playlist has no tracks -- add some before starting a session"})
+                return
+            name, controller = self.session_manager.create(
+                initial_library=initial_library, playlist_id=playlist_id, playlist_name=playlist["name"],
+            )
+        else:
+            name, controller = self.session_manager.create()
         self._send_json(200, {"name": name, **controller.status()})
 
     def _handle_session_action(self, name, action):
@@ -567,6 +617,118 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 4 and parts[0] == "api" and parts[1] == "library-tracks":
             return (parts[2], parts[3])
         return None
+
+    # -- playlists (filtered saved track sets, backing session creation) -
+
+    def _playlist_route(self):
+        """Parse /api/playlists[/<id>/<action>] into (id, action); (None,
+        None) for the bare collection route (GET list / POST create).
+        Returns None if this path isn't a playlists route at all, so
+        do_GET/do_POST fall through to their other routes unchanged --
+        mirrors _session_route()'s shape."""
+        parts = self.path_no_query.strip("/").split("/")
+        if parts == ["api", "playlists"]:
+            return (None, None)
+        if len(parts) == 4 and parts[0] == "api" and parts[1] == "playlists":
+            return (parts[2], parts[3])
+        return None
+
+    def _handle_playlist_tracks(self, playlist_id_str):
+        try:
+            playlist_id = int(playlist_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid playlist id"})
+            return
+        try:
+            tracks = library.get_playlist_tracks(config.LIBRARY_DB, playlist_id)
+        except ValueError as e:
+            self._send_json(404, {"error": str(e)})
+            return
+        self._send_json(200, tracks)
+
+    def _handle_playlist_create(self):
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            try:
+                playlist_id = library.create_playlist(config.LIBRARY_DB, payload.get("name", ""))
+                library.set_playlist_tracks(config.LIBRARY_DB, playlist_id, payload.get("track_ids") or [])
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            playlist = library.get_playlist(config.LIBRARY_DB, playlist_id)
+
+        self._send_json(200, playlist)
+
+    def _handle_playlist_rename(self, playlist_id_str):
+        try:
+            playlist_id = int(playlist_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid playlist id"})
+            return
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            try:
+                found = library.rename_playlist(config.LIBRARY_DB, playlist_id, payload.get("name", ""))
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            if not found:
+                self._send_json(404, {"error": f"no playlist with id {playlist_id}"})
+                return
+            playlist = library.get_playlist(config.LIBRARY_DB, playlist_id)
+
+        self._send_json(200, playlist)
+
+    def _handle_playlist_update_tracks(self, playlist_id_str):
+        try:
+            playlist_id = int(playlist_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid playlist id"})
+            return
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            try:
+                library.set_playlist_tracks(config.LIBRARY_DB, playlist_id, payload.get("track_ids") or [])
+            except ValueError as e:
+                self._send_json(404, {"error": str(e)})
+                return
+            playlist = library.get_playlist(config.LIBRARY_DB, playlist_id)
+
+        self._send_json(200, playlist)
+
+    def _handle_playlist_delete(self, playlist_id_str):
+        try:
+            playlist_id = int(playlist_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid playlist id"})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            found = library.delete_playlist(config.LIBRARY_DB, playlist_id)
+            if not found:
+                self._send_json(404, {"error": f"no playlist with id {playlist_id}"})
+                return
+
+        self._send_json(200, {"deleted": playlist_id})
 
     def _dispatch_library_track_post(self, route):
         track_id, action = route

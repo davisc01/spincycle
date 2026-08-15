@@ -47,6 +47,22 @@ CREATE TABLE IF NOT EXISTS tracks (
 CREATE INDEX IF NOT EXISTS idx_tracks_genre_era ON tracks(genre, era);
 """
 
+_PLAYLIST_SCHEMA = """
+CREATE TABLE IF NOT EXISTS playlists (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS playlist_tracks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    playlist_id INTEGER NOT NULL,
+    track_id    INTEGER NOT NULL,
+    UNIQUE(playlist_id, track_id)
+);
+CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id);
+"""
+
 
 def _connect(db_path):
     conn = sqlite3.connect(db_path, timeout=5)
@@ -72,43 +88,53 @@ def _ensure_db(db_path):
     one row on a duplicate url is harmless -- it self-corrects on the next
     warm-cache run either way).
     """
-    if os.path.exists(db_path):
-        return
+    if not os.path.exists(db_path):
+        conn = _connect(db_path)
+        try:
+            conn.executescript(_SCHEMA)
+            conn.commit()
+        finally:
+            conn.close()
 
+        import config  # local import: config imports nothing from here, but avoids a cycle at module load time
+
+        if os.path.exists(config.LIBRARY_FILE):
+            imported = _import_csv_rows(db_path, config.LIBRARY_FILE, mode="append")
+            print(f"[library] Migrated {imported['imported']} track(s) from {config.LIBRARY_FILE} into {db_path}.")
+            shutil.copy2(config.LIBRARY_FILE, config.LIBRARY_FILE + ".pre-migration.bak")
+
+        cache_failures_file = os.path.join(config.CACHE_ROOT, "cache_failures.json")
+        if os.path.exists(cache_failures_file):
+            import json
+            try:
+                with open(cache_failures_file, "r", encoding="utf-8") as f:
+                    failures = json.load(f)
+            except (OSError, ValueError):
+                failures = []
+            if failures:
+                conn = _connect(db_path)
+                try:
+                    now = datetime.now(timezone.utc).isoformat()
+                    for failure in failures:
+                        conn.execute(
+                            "UPDATE tracks SET cache_error = ?, cache_error_at = ? WHERE url = ?",
+                            (failure.get("error", ""), now, failure.get("url", "")),
+                        )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+    # Runs on every call (not just for a brand-new db_path) so an existing
+    # install's library.db picks up the playlists/playlist_tracks tables
+    # the first time anything in this module runs after upgrading --
+    # CREATE TABLE/INDEX IF NOT EXISTS make every call after the first a
+    # cheap no-op.
     conn = _connect(db_path)
     try:
-        conn.executescript(_SCHEMA)
+        conn.executescript(_PLAYLIST_SCHEMA)
         conn.commit()
     finally:
         conn.close()
-
-    import config  # local import: config imports nothing from here, but avoids a cycle at module load time
-
-    if os.path.exists(config.LIBRARY_FILE):
-        imported = _import_csv_rows(db_path, config.LIBRARY_FILE, mode="append")
-        print(f"[library] Migrated {imported['imported']} track(s) from {config.LIBRARY_FILE} into {db_path}.")
-        shutil.copy2(config.LIBRARY_FILE, config.LIBRARY_FILE + ".pre-migration.bak")
-
-    cache_failures_file = os.path.join(config.CACHE_ROOT, "cache_failures.json")
-    if os.path.exists(cache_failures_file):
-        import json
-        try:
-            with open(cache_failures_file, "r", encoding="utf-8") as f:
-                failures = json.load(f)
-        except (OSError, ValueError):
-            failures = []
-        if failures:
-            conn = _connect(db_path)
-            try:
-                now = datetime.now(timezone.utc).isoformat()
-                for failure in failures:
-                    conn.execute(
-                        "UPDATE tracks SET cache_error = ?, cache_error_at = ? WHERE url = ?",
-                        (failure.get("error", ""), now, failure.get("url", "")),
-                    )
-                conn.commit()
-            finally:
-                conn.close()
 
 
 def _row_to_track(row):
@@ -224,10 +250,13 @@ def update_track(db_path, track_id, artist, song, genre, era, url):
 
 
 def delete_track(db_path, track_id):
-    """Delete a single row by id. Returns False if track_id doesn't exist."""
+    """Delete a single row by id (and drop it from any playlist it's a
+    member of -- no FK cascade is configured, so this is explicit).
+    Returns False if track_id doesn't exist."""
     _ensure_db(db_path)
     conn = _connect(db_path)
     try:
+        conn.execute("DELETE FROM playlist_tracks WHERE track_id = ?", (track_id,))
         cur = conn.execute("DELETE FROM tracks WHERE id = ?", (track_id,))
         conn.commit()
         return cur.rowcount > 0
@@ -236,14 +265,16 @@ def delete_track(db_path, track_id):
 
 
 def delete_tracks(db_path, track_ids):
-    """Bulk delete by id, one transaction. Returns the number of rows
-    actually deleted (ids that didn't exist are silently skipped)."""
+    """Bulk delete by id, one transaction (also dropping each from any
+    playlist it's a member of). Returns the number of rows actually
+    deleted (ids that didn't exist are silently skipped)."""
     _ensure_db(db_path)
     if not track_ids:
         return 0
     conn = _connect(db_path)
     try:
         placeholders = ",".join("?" for _ in track_ids)
+        conn.execute(f"DELETE FROM playlist_tracks WHERE track_id IN ({placeholders})", list(track_ids))
         cur = conn.execute(f"DELETE FROM tracks WHERE id IN ({placeholders})", list(track_ids))
         conn.commit()
         return cur.rowcount
@@ -275,6 +306,155 @@ def set_cache_status(db_path, track_id, error):
         conn.commit()
     finally:
         conn.close()
+
+
+def create_playlist(db_path, name):
+    """Create a new (initially empty) playlist, returning its new id.
+    Raises ValueError if name is blank."""
+    _ensure_db(db_path)
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("playlist name is required")
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute("INSERT INTO playlists (name) VALUES (?)", (name,))
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def list_playlists(db_path):
+    """Every playlist with its member track_count, sorted by name -- for
+    the Playlists settings section and the new-session picker."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT p.id, p.name, p.created_at, p.updated_at, COUNT(pt.id) AS track_count "
+            "FROM playlists p LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id "
+            "GROUP BY p.id ORDER BY p.name COLLATE NOCASE"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_playlist(db_path, playlist_id):
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT id, name, created_at, updated_at FROM playlists WHERE id = ?", (playlist_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def rename_playlist(db_path, playlist_id, name):
+    """Returns False if playlist_id doesn't exist. Raises ValueError if
+    name is blank."""
+    _ensure_db(db_path)
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("playlist name is required")
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute(
+            "UPDATE playlists SET name = ?, updated_at = datetime('now') WHERE id = ?",
+            (name, playlist_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_playlist(db_path, playlist_id):
+    """Deletes the playlist and its playlist_tracks rows in one
+    transaction. Returns False if playlist_id doesn't exist. A session
+    already running from this playlist is unaffected -- it holds its own
+    filtered library dict in memory (see library_for_playlist), not a
+    live reference to this row."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        conn.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,))
+        cur = conn.execute("DELETE FROM playlists WHERE id = ?", (playlist_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def set_playlist_tracks(db_path, playlist_id, track_ids):
+    """Replaces a playlist's full membership in one call -- matches how
+    the checkbox-based builder UI submits the whole selected set at once
+    rather than incremental add/remove calls. Silently ignores
+    track_ids that don't exist in tracks (same tolerance delete_tracks
+    has). Raises ValueError if playlist_id doesn't exist."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        if conn.execute("SELECT 1 FROM playlists WHERE id = ?", (playlist_id,)).fetchone() is None:
+            raise ValueError(f"no playlist with id {playlist_id}")
+        conn.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,))
+        if track_ids:
+            conn.executemany(
+                "INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id) "
+                "SELECT ?, id FROM tracks WHERE id = ?",
+                [(playlist_id, track_id) for track_id in track_ids],
+            )
+        conn.execute("UPDATE playlists SET updated_at = datetime('now') WHERE id = ?", (playlist_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_playlist_tracks(db_path, playlist_id):
+    """Flat list of the playlist's member track dicts, in playlist_tracks
+    insertion order, for the builder's edit view. Raises ValueError if
+    playlist_id doesn't exist."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        if conn.execute("SELECT 1 FROM playlists WHERE id = ?", (playlist_id,)).fetchone() is None:
+            raise ValueError(f"no playlist with id {playlist_id}")
+        rows = conn.execute(
+            "SELECT t.* FROM tracks t JOIN playlist_tracks pt ON pt.track_id = t.id "
+            "WHERE pt.playlist_id = ? ORDER BY pt.id",
+            (playlist_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [_row_to_track(row) for row in rows]
+
+
+def library_for_playlist(db_path, playlist_id):
+    """Same {genre: {era: [tracks]}} shape as load_library(), scoped to
+    one playlist's member tracks -- the JOIN naturally excludes any track
+    that was deleted from the library since the playlist was built.
+    Returns {} if the playlist has zero surviving member tracks or
+    doesn't exist -- callers are responsible for rejecting an empty
+    result with a clear error rather than silently starting a session
+    with nothing to play."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT t.* FROM tracks t JOIN playlist_tracks pt ON pt.track_id = t.id "
+            "WHERE pt.playlist_id = ?",
+            (playlist_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    result = {}
+    for row in rows:
+        track = _row_to_track(row)
+        result.setdefault(track["genre"], {}).setdefault(track["era"], []).append(track)
+    return result
 
 
 def _read_csv_rows(csv_path):
