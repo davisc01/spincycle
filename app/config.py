@@ -117,6 +117,11 @@ LIBRARY_FILE = os.path.join(CONFIG_DIR, "library.csv")
 # library._ensure_db()) and as the target of CSV import/export -- nothing
 # in the app writes to LIBRARY_FILE itself anymore.
 LIBRARY_DB = os.path.join(CONFIG_DIR, "library.db")
+# Uploaded overlay-profile logo images (see library.py's overlays table) --
+# filenames are server-generated (<overlay_id>.<ext>), not client-supplied,
+# so there's no path-traversal risk in how they're named or served (see
+# library_server.py's /overlay-logo/<file> route).
+OVERLAYS_DIR = os.path.join(CONFIG_DIR, "overlays")
 
 # --- Playback mode ---------------------------------------------------------
 # "console" (default): mpv renders to the physical console via DRM/KMS, as

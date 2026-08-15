@@ -66,6 +66,18 @@
   const playlistCancelBtn = document.getElementById("playlist-cancel-btn");
   const playlistDeleteBtn = document.getElementById("playlist-delete-btn");
 
+  const newOverlayBtn = document.getElementById("new-overlay-btn");
+  const overlayList = document.getElementById("overlay-list");
+  const overlayBuilderPanel = document.getElementById("overlay-builder-panel");
+  const overlayBuilderTitle = document.getElementById("overlay-builder-title");
+  const overlayNameInput = document.getElementById("overlay-name-input");
+  const overlayPhraseInput = document.getElementById("overlay-phrase-input");
+  const overlayLogoInput = document.getElementById("overlay-logo-input");
+  const overlayLogoPreview = document.getElementById("overlay-logo-preview");
+  const overlaySaveBtn = document.getElementById("overlay-save-btn");
+  const overlayCancelBtn = document.getElementById("overlay-cancel-btn");
+  const overlayDeleteBtn = document.getElementById("overlay-delete-btn");
+
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
   const infoLastWarmRun = document.getElementById("info-last-warm-run");
@@ -709,7 +721,7 @@
   emptyLibraryNotice.addEventListener("click", openSettings);
 
   async function refreshSettings() {
-    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshLibraryTracks(), refreshWarmStatus(), refreshPlaybackLog(), refreshPlaylists()]);
+    await Promise.all([refreshCacheRoot(), refreshLibraryStatus(), refreshLibraryTracks(), refreshWarmStatus(), refreshPlaybackLog(), refreshPlaylists(), refreshOverlays()]);
   }
 
   async function refreshCacheRoot() {
@@ -1100,6 +1112,159 @@
 
   playlistDeleteBtn.addEventListener("click", () => {
     if (editingPlaylistId) deletePlaylist(editingPlaylistId, playlistNameInput.value.trim());
+  });
+
+  // -- overlays (logo + phrase banner shown across the top of the player) -
+
+  let overlays = [];
+  let editingOverlayId = null;
+  let pendingOverlayLogoFile = null;
+
+  async function refreshOverlays() {
+    const res = await fetch("/api/overlays");
+    overlays = await res.json();
+    renderOverlayList();
+  }
+
+  function renderOverlayList() {
+    overlayList.innerHTML = "";
+    if (!overlays.length) {
+      const li = document.createElement("li");
+      li.textContent = "(none)";
+      overlayList.appendChild(li);
+      return;
+    }
+    for (const o of overlays) {
+      const li = document.createElement("li");
+      li.className = "session-item";
+
+      const info = document.createElement("div");
+      info.className = "session-info";
+      const name = document.createElement("span");
+      name.className = "session-name";
+      name.textContent = o.name;
+      const meta = document.createElement("span");
+      meta.className = "session-meta";
+      meta.textContent = o.active ? `Active — ${o.phrase || "(no phrase)"}` : (o.phrase || "(no phrase)");
+      info.append(name, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "session-actions";
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.textContent = o.active ? "Deactivate" : "Activate";
+      toggleBtn.addEventListener("click", () => toggleOverlayActive(o));
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => openOverlayBuilder("edit", o));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "close-session-btn";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => deleteOverlay(o.id, o.name));
+      actions.append(toggleBtn, editBtn, deleteBtn);
+
+      li.append(info, actions);
+      overlayList.appendChild(li);
+    }
+  }
+
+  async function toggleOverlayActive(overlay) {
+    const result = overlay.active
+      ? await postJSON("/api/overlays/deactivate", {})
+      : await postJSON(`/api/overlays/${overlay.id}/activate`, {});
+    if (result && result.error) {
+      alert(result.error);
+      return;
+    }
+    await refreshOverlays();
+  }
+
+  async function deleteOverlay(id, name) {
+    if (!confirm(`Delete overlay "${name}"?`)) return;
+    const result = await postJSON(`/api/overlays/${id}/delete`, {});
+    if (result && result.error) {
+      alert(result.error);
+      return;
+    }
+    if (editingOverlayId === id) closeOverlayBuilder();
+    await refreshOverlays();
+  }
+
+  function openOverlayBuilder(mode, overlay) {
+    editingOverlayId = mode === "edit" ? overlay.id : null;
+    overlayBuilderTitle.textContent = mode === "edit" ? "Edit overlay" : "New overlay";
+    overlayNameInput.value = overlay ? overlay.name : "";
+    overlayPhraseInput.value = overlay ? overlay.phrase || "" : "";
+    overlayDeleteBtn.hidden = mode !== "edit";
+    pendingOverlayLogoFile = null;
+    overlayLogoInput.value = "";
+    if (overlay && overlay.logo_path) {
+      overlayLogoPreview.src = `/overlay-logo/${overlay.id}`;
+      overlayLogoPreview.hidden = false;
+    } else {
+      overlayLogoPreview.removeAttribute("src");
+      overlayLogoPreview.hidden = true;
+    }
+    overlayBuilderPanel.hidden = false;
+    overlayBuilderPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closeOverlayBuilder() {
+    overlayBuilderPanel.hidden = true;
+    editingOverlayId = null;
+    pendingOverlayLogoFile = null;
+    overlayNameInput.value = "";
+    overlayPhraseInput.value = "";
+    overlayLogoInput.value = "";
+    overlayLogoPreview.hidden = true;
+  }
+
+  newOverlayBtn.addEventListener("click", () => openOverlayBuilder("add", null));
+  overlayCancelBtn.addEventListener("click", closeOverlayBuilder);
+
+  overlayLogoInput.addEventListener("change", () => {
+    pendingOverlayLogoFile = overlayLogoInput.files[0] || null;
+    if (pendingOverlayLogoFile) {
+      overlayLogoPreview.src = URL.createObjectURL(pendingOverlayLogoFile);
+      overlayLogoPreview.hidden = false;
+    }
+  });
+
+  overlaySaveBtn.addEventListener("click", async () => {
+    const name = overlayNameInput.value.trim();
+    if (!name) {
+      alert("Enter an overlay name.");
+      return;
+    }
+    const phrase = overlayPhraseInput.value.trim();
+    let result;
+    if (editingOverlayId) {
+      result = await postJSON(`/api/overlays/${editingOverlayId}/update`, { name, phrase });
+    } else {
+      result = await postJSON("/api/overlays", { name, phrase });
+    }
+    if (!result || result.error) {
+      alert((result && result.error) || "Save failed.");
+      return;
+    }
+    if (pendingOverlayLogoFile) {
+      const formData = new FormData();
+      formData.append("logo", pendingOverlayLogoFile);
+      const res = await fetch(`/api/overlays/${result.id}/logo`, { method: "POST", body: formData });
+      const logoResult = await res.json();
+      if (!res.ok || logoResult.error) {
+        alert(logoResult.error || "Logo upload failed.");
+        return;
+      }
+    }
+    closeOverlayBuilder();
+    await refreshOverlays();
+  });
+
+  overlayDeleteBtn.addEventListener("click", () => {
+    if (editingOverlayId) deleteOverlay(editingOverlayId, overlayNameInput.value.trim());
   });
 
   // -- add/edit song form -------------------------------------------------

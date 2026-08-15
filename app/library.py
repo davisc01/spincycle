@@ -63,6 +63,19 @@ CREATE TABLE IF NOT EXISTS playlist_tracks (
 CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id);
 """
 
+_OVERLAY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS overlays (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    name              TEXT NOT NULL,
+    phrase            TEXT NOT NULL DEFAULT '',
+    logo_path         TEXT,
+    logo_content_type TEXT,
+    active            INTEGER NOT NULL DEFAULT 0,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
 
 def _connect(db_path):
     conn = sqlite3.connect(db_path, timeout=5)
@@ -125,13 +138,14 @@ def _ensure_db(db_path):
                     conn.close()
 
     # Runs on every call (not just for a brand-new db_path) so an existing
-    # install's library.db picks up the playlists/playlist_tracks tables
-    # the first time anything in this module runs after upgrading --
+    # install's library.db picks up the playlists/playlist_tracks/overlays
+    # tables the first time anything in this module runs after upgrading --
     # CREATE TABLE/INDEX IF NOT EXISTS make every call after the first a
     # cheap no-op.
     conn = _connect(db_path)
     try:
         conn.executescript(_PLAYLIST_SCHEMA)
+        conn.executescript(_OVERLAY_SCHEMA)
         conn.commit()
     finally:
         conn.close()
@@ -455,6 +469,133 @@ def library_for_playlist(db_path, playlist_id):
         track = _row_to_track(row)
         result.setdefault(track["genre"], {}).setdefault(track["era"], []).append(track)
     return result
+
+
+def create_overlay(db_path, name, phrase):
+    """Create a new overlay profile (no logo yet -- see set_overlay_logo),
+    returning its new id. Raises ValueError if name is blank."""
+    _ensure_db(db_path)
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("overlay name is required")
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute(
+            "INSERT INTO overlays (name, phrase) VALUES (?, ?)",
+            (name, (phrase or "").strip()),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def list_overlays(db_path):
+    """Every overlay profile, sorted by name, for the Overlays settings
+    section."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM overlays ORDER BY name COLLATE NOCASE").fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_overlay(db_path, overlay_id):
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        row = conn.execute("SELECT * FROM overlays WHERE id = ?", (overlay_id,)).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def get_active_overlay(db_path):
+    """The one overlay profile with active=1, or None -- read fresh by
+    controller.status() on every poll (no caching), same as
+    config.cache_root_problem()."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        row = conn.execute("SELECT * FROM overlays WHERE active = 1").fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def update_overlay(db_path, overlay_id, name, phrase):
+    """Updates name/phrase only (logo is set separately via
+    set_overlay_logo). Returns False if overlay_id doesn't exist. Raises
+    ValueError if name is blank."""
+    _ensure_db(db_path)
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("overlay name is required")
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute(
+            "UPDATE overlays SET name = ?, phrase = ?, updated_at = datetime('now') WHERE id = ?",
+            (name, (phrase or "").strip(), overlay_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def set_overlay_logo(db_path, overlay_id, logo_path, content_type):
+    """Records the on-disk filename (under config.OVERLAYS_DIR) and sniffed
+    content-type of a freshly-uploaded logo for this overlay -- the
+    content-type is stored rather than inferred from a file extension at
+    serve time, since logo_path is a server-generated name, not a
+    client-supplied filename. Returns False if overlay_id doesn't exist."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute(
+            "UPDATE overlays SET logo_path = ?, logo_content_type = ?, updated_at = datetime('now') WHERE id = ?",
+            (logo_path, content_type, overlay_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def set_active_overlay(db_path, overlay_id):
+    """Sets overlay_id as the single active overlay, clearing active on
+    every other row in the same transaction. overlay_id=None turns the
+    overlay off globally (no active row). Raises ValueError if overlay_id
+    is given but doesn't exist."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        if overlay_id is not None:
+            if conn.execute("SELECT 1 FROM overlays WHERE id = ?", (overlay_id,)).fetchone() is None:
+                raise ValueError(f"no overlay with id {overlay_id}")
+        conn.execute("UPDATE overlays SET active = 0 WHERE active = 1")
+        if overlay_id is not None:
+            conn.execute("UPDATE overlays SET active = 1 WHERE id = ?", (overlay_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_overlay(db_path, overlay_id):
+    """Deletes the overlay profile row. Returns False if overlay_id doesn't
+    exist. Callers that need to also remove the logo file from disk should
+    call get_overlay() first to read its logo_path -- library.py itself has
+    no knowledge of config.OVERLAYS_DIR."""
+    _ensure_db(db_path)
+    conn = _connect(db_path)
+    try:
+        cur = conn.execute("DELETE FROM overlays WHERE id = ?", (overlay_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
 
 
 def _read_csv_rows(csv_path):

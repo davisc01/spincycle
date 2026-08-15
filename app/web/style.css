@@ -722,6 +722,15 @@ aside h3 {
   flex: 1;
 }
 
+#overlay-logo-preview {
+  max-height: 48px;
+  max-width: 96px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .track-form-actions {
   display: flex;
   flex-wrap: wrap;

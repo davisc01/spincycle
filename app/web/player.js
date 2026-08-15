@@ -5,6 +5,9 @@
   const overlay = document.getElementById("overlay");
   const tapToPlay = document.getElementById("tap-to-play");
   const trackOverlay = document.getElementById("track-overlay");
+  const topOverlay = document.getElementById("top-overlay");
+  const topOverlayLogo = document.getElementById("top-overlay-logo");
+  const topOverlayPhrase = document.getElementById("top-overlay-phrase");
 
   if (!session) {
     overlay.textContent = "No session specified -- open this page from the web remote's \"Launch Player\" button.";
@@ -33,6 +36,31 @@
       overlayHideTimer = null;
     }
     trackOverlay.classList.remove("shown");
+  }
+
+  let currentOverlayLogoUrl = null;
+
+  function updateTopOverlay(overlay) {
+    // No fade timer, unlike showTrackOverlay -- this banner (e.g.
+    // "Intermission...") is meant to stay up the whole time it's active,
+    // not flash briefly.
+    if (!overlay || (!overlay.phrase && !overlay.logo_url)) {
+      topOverlay.classList.remove("shown");
+      return;
+    }
+    topOverlayPhrase.textContent = overlay.phrase || "";
+    if (overlay.logo_url) {
+      if (overlay.logo_url !== currentOverlayLogoUrl) {
+        currentOverlayLogoUrl = overlay.logo_url;
+        topOverlayLogo.src = overlay.logo_url;
+      }
+      topOverlayLogo.hidden = false;
+    } else {
+      currentOverlayLogoUrl = null;
+      topOverlayLogo.removeAttribute("src");
+      topOverlayLogo.hidden = true;
+    }
+    topOverlay.classList.add("shown");
   }
 
   function showTapToPlay() {
@@ -71,6 +99,8 @@
     const showMessage = message && !message.startsWith("Now playing:");
     overlay.textContent = showMessage ? message : "";
     overlay.style.display = showMessage ? "" : "none";
+
+    updateTopOverlay(status.overlay);
 
     if (status.video_url !== currentUrl) {
       currentUrl = status.video_url;

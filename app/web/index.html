@@ -189,6 +189,30 @@
     </section>
 
     <section>
+      <h3>Overlays</h3>
+      <p class="section-hint">A logo + phrase banner (e.g. "Intermission...") shown across the top of the player. Only one overlay can be active at a time.</p>
+      <div class="library-toolbar">
+        <button id="new-overlay-btn" type="button">+ New overlay</button>
+      </div>
+      <ul id="overlay-list"></ul>
+
+      <section id="overlay-builder-panel" hidden>
+        <h3 id="overlay-builder-title">New overlay</h3>
+        <input type="text" id="overlay-name-input" placeholder="Overlay name" required>
+        <input type="text" id="overlay-phrase-input" placeholder="Phrase (e.g. Intermission...)">
+        <div class="track-url-row">
+          <img id="overlay-logo-preview" alt="" hidden>
+          <input type="file" id="overlay-logo-input" accept="image/*">
+        </div>
+        <div class="track-form-actions">
+          <button id="overlay-save-btn" type="button">Save overlay</button>
+          <button id="overlay-cancel-btn" type="button">Cancel</button>
+          <button id="overlay-delete-btn" type="button" class="close-session-btn" hidden>Delete overlay</button>
+        </div>
+      </section>
+    </section>
+
+    <section>
       <h3>Cache warming</h3>
       <p id="warm-status">Idle</p>
       <button id="warm-cache-btn" type="button">Warm cache</button>

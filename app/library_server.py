@@ -57,6 +57,7 @@ _library_lock = threading.Lock()
 # under a couple MB.
 _MAX_JSON_BODY_BYTES = 1 * 1024 * 1024
 _MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+_MAX_LOGO_BYTES = 5 * 1024 * 1024
 
 _WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
 _IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
@@ -113,6 +114,26 @@ def parse_multipart_file(content_type, body):
             return content
 
     raise ValueError("no file part found in upload")
+
+
+def _sniff_image_content_type(data):
+    """Identify an uploaded overlay logo's image format from its magic
+    bytes -- never trust a client-supplied filename/extension, since the
+    on-disk name we actually use (see _handle_overlay_logo) is server-
+    generated. Returns a content-type string, or None if it's not a
+    recognized image format."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"GIF87a") or data.startswith(b"GIF89a"):
+        return "image/gif"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp"
+    stripped = data.lstrip()[:256]
+    if stripped.startswith(b"<?xml") or stripped.startswith(b"<svg"):
+        return "image/svg+xml"
+    return None
 
 
 def start_background_warm_cache():
@@ -241,11 +262,22 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(404, "<h1>Not found</h1>")
             return
 
+        overlay_route = self._overlay_route()
+        if overlay_route is not None:
+            overlay_id, action = overlay_route
+            if overlay_id is None and action is None:
+                self._send_json(200, library.list_overlays(config.LIBRARY_DB))
+                return
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+
         path = self.path_no_query
         if path in _STATIC_FILES:
             self._serve_static(path)
         elif path.startswith("/video/"):
             self._serve_video(unquote(path[len("/video/"):]))
+        elif path.startswith("/overlay-logo/"):
+            self._serve_overlay_logo(unquote(path[len("/overlay-logo/"):]))
         elif path == "/library.csv":
             self._handle_download_csv()
         elif path == "/api/status":
@@ -306,6 +338,30 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if action == "delete":
                 self._handle_playlist_delete(playlist_id)
+                return
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+
+        overlay_route = self._overlay_route()
+        if overlay_route is not None:
+            overlay_id, action = overlay_route
+            if overlay_id is None and action is None:
+                self._handle_overlay_create()
+                return
+            if overlay_id is None and action == "deactivate":
+                self._handle_overlay_deactivate()
+                return
+            if action == "update":
+                self._handle_overlay_update(overlay_id)
+                return
+            if action == "logo":
+                self._handle_overlay_logo(overlay_id)
+                return
+            if action == "activate":
+                self._handle_overlay_activate(overlay_id)
+                return
+            if action == "delete":
+                self._handle_overlay_delete(overlay_id)
                 return
             self._send_html(404, "<h1>Not found</h1>")
             return
@@ -729,6 +785,174 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         self._send_json(200, {"deleted": playlist_id})
+
+    # -- overlays (logo + phrase banner shown on the web player) ---------
+
+    def _overlay_route(self):
+        """Parse /api/overlays[/<id>/<action>] into (id, action); (None,
+        None) for the bare collection route (GET list / POST create);
+        (None, "deactivate") for the id-less deactivate route. Returns
+        None if this path isn't an overlays route at all, so do_GET/
+        do_POST fall through to their other routes unchanged -- mirrors
+        _playlist_route()'s shape."""
+        parts = self.path_no_query.strip("/").split("/")
+        if parts == ["api", "overlays"]:
+            return (None, None)
+        if parts == ["api", "overlays", "deactivate"]:
+            return (None, "deactivate")
+        if len(parts) == 4 and parts[0] == "api" and parts[1] == "overlays":
+            return (parts[2], parts[3])
+        return None
+
+    def _handle_overlay_create(self):
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            try:
+                overlay_id = library.create_overlay(config.LIBRARY_DB, payload.get("name", ""), payload.get("phrase", ""))
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            overlay = library.get_overlay(config.LIBRARY_DB, overlay_id)
+
+        self._send_json(200, overlay)
+
+    def _handle_overlay_update(self, overlay_id_str):
+        try:
+            overlay_id = int(overlay_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid overlay id"})
+            return
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            try:
+                found = library.update_overlay(config.LIBRARY_DB, overlay_id, payload.get("name", ""), payload.get("phrase", ""))
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            if not found:
+                self._send_json(404, {"error": f"no overlay with id {overlay_id}"})
+                return
+            overlay = library.get_overlay(config.LIBRARY_DB, overlay_id)
+
+        self._send_json(200, overlay)
+
+    def _handle_overlay_logo(self, overlay_id_str):
+        try:
+            overlay_id = int(overlay_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid overlay id"})
+            return
+        if library.get_overlay(config.LIBRARY_DB, overlay_id) is None:
+            self._send_json(404, {"error": f"no overlay with id {overlay_id}"})
+            return
+
+        length = int(self.headers.get("Content-Length", 0))
+        if length > _MAX_LOGO_BYTES:
+            self.close_connection = True
+            self._send_json(413, {"error": f"logo too large ({length} bytes, max {_MAX_LOGO_BYTES // (1024 * 1024)} MiB)"})
+            return
+        body = self.rfile.read(length)
+        content_type = self.headers.get("Content-Type", "")
+
+        try:
+            file_bytes = parse_multipart_file(content_type, body)
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        image_type = _sniff_image_content_type(file_bytes)
+        if image_type is None:
+            self._send_json(400, {"error": "unrecognized image format -- use PNG, JPEG, GIF, WEBP, or SVG"})
+            return
+
+        os.makedirs(config.OVERLAYS_DIR, exist_ok=True)
+        filename = str(overlay_id)
+        with open(os.path.join(config.OVERLAYS_DIR, filename), "wb") as f:
+            f.write(file_bytes)
+
+        with _library_lock:
+            self._backup_library_db()
+            library.set_overlay_logo(config.LIBRARY_DB, overlay_id, filename, image_type)
+            overlay = library.get_overlay(config.LIBRARY_DB, overlay_id)
+
+        self._send_json(200, overlay)
+
+    def _handle_overlay_activate(self, overlay_id_str):
+        try:
+            overlay_id = int(overlay_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid overlay id"})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            try:
+                library.set_active_overlay(config.LIBRARY_DB, overlay_id)
+            except ValueError as e:
+                self._send_json(404, {"error": str(e)})
+                return
+            overlay = library.get_overlay(config.LIBRARY_DB, overlay_id)
+
+        self._send_json(200, overlay)
+
+    def _handle_overlay_deactivate(self):
+        with _library_lock:
+            self._backup_library_db()
+            library.set_active_overlay(config.LIBRARY_DB, None)
+
+        self._send_json(200, {"active": None})
+
+    def _handle_overlay_delete(self, overlay_id_str):
+        try:
+            overlay_id = int(overlay_id_str)
+        except ValueError:
+            self._send_json(400, {"error": "invalid overlay id"})
+            return
+
+        with _library_lock:
+            self._backup_library_db()
+            overlay = library.get_overlay(config.LIBRARY_DB, overlay_id)
+            found = library.delete_overlay(config.LIBRARY_DB, overlay_id)
+            if not found:
+                self._send_json(404, {"error": f"no overlay with id {overlay_id}"})
+                return
+            if overlay and overlay["logo_path"]:
+                try:
+                    os.remove(os.path.join(config.OVERLAYS_DIR, overlay["logo_path"]))
+                except OSError:
+                    pass
+
+        self._send_json(200, {"deleted": overlay_id})
+
+    def _serve_overlay_logo(self, overlay_id_str):
+        try:
+            overlay_id = int(overlay_id_str)
+        except ValueError:
+            self._send_html(400, "<h1>Invalid overlay id</h1>")
+            return
+        overlay = library.get_overlay(config.LIBRARY_DB, overlay_id)
+        if overlay is None or not overlay["logo_path"]:
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+        try:
+            with open(os.path.join(config.OVERLAYS_DIR, overlay["logo_path"]), "rb") as f:
+                body = f.read()
+        except OSError:
+            self._send_html(404, "<h1>Not found</h1>")
+            return
+        self._send_bytes(200, body, overlay["logo_content_type"] or "application/octet-stream")
 
     def _dispatch_library_track_post(self, route):
         track_id, action = route

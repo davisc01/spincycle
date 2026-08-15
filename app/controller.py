@@ -29,6 +29,19 @@ from player import make_player
 _ALL_TRACKS_FAILED_BACKOFF_SECONDS = 30
 
 
+def _overlay_payload(overlay_row):
+    """Shapes library.get_active_overlay()'s row (or None) into what
+    player.js actually needs -- read fresh on every status() call (global,
+    not per-controller state) so any open player tab reflects an
+    activate/deactivate from the Library panel within one poll cycle."""
+    if overlay_row is None:
+        return None
+    return {
+        "phrase": overlay_row["phrase"],
+        "logo_url": f"/overlay-logo/{overlay_row['id']}" if overlay_row["logo_path"] else None,
+    }
+
+
 def _log_playback(line):
     # A bad CACHE_ROOT must never take down the play loop -- just skip the
     # log line and keep playing; config.cache_root_problem() surfaces the
@@ -220,6 +233,7 @@ class SpinCycleController:
                 "status_message": self._status_message,
                 "cache_root_problem": config.cache_root_problem(),
                 "playlist_name": self._playlist_name,
+                "overlay": _overlay_payload(library.get_active_overlay(config.LIBRARY_DB)),
             }
 
     def track_list(self):
