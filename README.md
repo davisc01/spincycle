@@ -46,10 +46,12 @@ Open the app's address in a browser on your LAN -- exactly where depends
 on how you exposed it (see the deploy READMEs linked above). Works the
 same on desktop and mobile, no app install needed.
 
-The landing page is a session picker -- **+ New Session**, **Select** to
-open a session's own genre/era/skip/stop controls plus a **Launch Player**
-button, **Close** to tear one down -- since each browser tab/device gets
-its own independent selection and player (see `sessions.py`).
+The landing page is a session picker -- **+ New Session** (optionally
+paired with a dropdown to start from a saved playlist instead of the
+whole library -- see "Playlists" below), **Select** to open a session's
+own genre/era/skip/stop controls plus a **Launch Player** button,
+**Close** to tear one down -- since each browser tab/device gets its own
+independent selection and player (see `sessions.py`).
 
 Picking a genre and an era starts playback automatically -- no separate
 confirm step, since picking from a dropdown is already a deliberate
@@ -58,17 +60,31 @@ current video and starts the new combination. Skip moves to the next
 track without changing the selection; Stop halts playback and returns to
 browsing. A Library button opens a sortable table of every track (with
 per-row Preview/Edit/Delete, an add-song form with a YouTube-search
-helper, and CSV export/import for bulk changes), plus the cache-warm
-trigger and playback log panels (see the deploy READMEs for how to reach
-the underlying data file directly, if needed).
+helper, and CSV export/import for bulk changes), a Playlists section
+(see below), plus the cache-warm trigger and playback log panels (see
+the deploy READMEs for how to reach the underlying data file directly,
+if needed).
 
-Below Skip/Stop, a **DJ** button opens an inline panel listing every song
-in the current genre/era, sorted by artist, with the currently-playing
-track highlighted. Hit **Queue** on any song to have it play right after
-the current one -- go back and hit Skip to jump to it immediately, or just
-let the current video finish. An "Up next" line above the panel always
-shows what's coming up: whichever song you queued, or, if you haven't
-queued anything, a preview of the next randomly-shuffled pick.
+Below Skip/Stop, a **DJ Request** button opens an inline panel listing
+every song in the current genre/era, sorted by artist, with the
+currently-playing track highlighted. Hit **Queue** on any song to have
+it play right after the current one -- go back and hit Skip to jump to
+it immediately, or just let the current video finish. An "Up next" line
+above the panel always shows what's coming up: whichever song you
+queued, or, if you haven't queued anything, a preview of the next
+randomly-shuffled pick.
+
+### Playlists
+
+A **Playlists** section in the Library panel lets you build a named,
+reusable subset of the library: filter by genre/era, check off songs,
+and save. Starting a new session offers a dropdown to pick one of your
+saved playlists instead of the whole library -- once picked, the
+genre/era dials and shuffle work exactly as usual, just limited to that
+playlist's tracks for the life of that session. Editing or deleting a
+playlist afterward never affects a session already running from it, and
+there's no route to switch a live session's playlist -- close it and
+start a new one instead.
 
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
@@ -102,10 +118,12 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   forking it.
 - `config.py` - paths, yt-dlp format string, mpv settings. Edit this first.
 - `config/library.db` - your actual video library, a local SQLite file:
-  artist, song, genre, era, url, plus id and cache-status columns. Manage
-  it from the app's Library panel (add/edit/delete/preview per song); for
-  bulk changes, use the panel's Export/Import CSV buttons rather than
-  editing the SQLite file directly.
+  artist, song, genre, era, url, plus id and cache-status columns, plus
+  your saved playlists (a `playlists` table and a `playlist_tracks` join
+  table). Manage tracks from the app's Library panel (add/edit/delete/
+  preview per song); for bulk changes, use the panel's Export/Import CSV
+  buttons rather than editing the SQLite file directly. Manage playlists
+  from the Library panel's Playlists section.
 - `library.py` - loads `library.db` into the genre -> era -> tracks
   structure, and resolves a genre/era pick (including the
   "Anything"/"Anytime" wildcards) into a track list. Also exposes
@@ -114,8 +132,11 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   don't cause ambiguity), and `import_csv()`/`export_csv_rows()` for bulk
   CSV import/export. An existing `library.csv` from before this file
   existed is imported into it automatically, once, the first time the app
-  runs. Also runnable standalone to sanity-check the library
-  (`python3 library.py`).
+  runs. Also exposes playlist CRUD (`create_playlist()`, etc.) and
+  `library_for_playlist()`, which returns that same genre -> era ->
+  tracks structure scoped to one playlist's tracks, for starting a
+  session limited to a playlist. Also runnable standalone to
+  sanity-check the library (`python3 library.py`).
 - `video_cache.py` - lazy caching layer. Also runnable standalone to
   pre-warm the whole library (`python3 video_cache.py`).
 - `controller.py` - `SpinCycleController`, the live playback engine behind
@@ -128,10 +149,14 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   `input_device.py`'s `Event` model so a future GPIO dial input could
   drive it too. Instance-scoped with no module-level globals, which is
   what lets `sessions.py` run many of them concurrently in web mode.
+  Optionally constructed scoped to a saved playlist instead of the whole
+  library (see "Playlists" above) -- every other method is unaware of
+  the distinction.
 - `sessions.py` - `SessionManager`, web-mode only: owns one
   `SpinCycleController` per session, keyed by a random adjective-animal
   name (e.g. `clever-otter`) that doubles as its id. Not used in console
   mode -- `main.py` wires up a single bare `SpinCycleController` there.
+  `create()` optionally accepts a playlist to scope the new session to.
 - `library_server.py` - LAN-only web server for the whole web remote:
   serves `web/` (`index.html`/`style.css`/`app.js`/`player.html`/
   `player.js`), a JSON API backed by either a single `SpinCycleController`
@@ -145,7 +170,11 @@ genre; `Anything` + `Anytime` shuffles the entire library.
   for add/list, `/api/library-tracks/<id>/{update,delete}`,
   `/api/library-tracks/bulk-delete`, `/api/library-tracks/search` for the
   YouTube search-and-suggest helper, `/upload`/`/upload-append` for CSV
-  import, `/library.csv` for export, and `/warm-cache`). Each track's own
+  import, `/library.csv` for export, and `/warm-cache`), plus a
+  `/api/playlists` family backing the Playlists section (list/create/
+  rename/delete a playlist, update its tracks) -- web mode only.
+  `POST /api/sessions` accepts an optional `playlist_id` to scope the
+  new session to a saved playlist instead of the whole library. Each track's own
   `cache_error` column reflects only its most recent warm-cache attempt, so
   a fixed track's row stops showing "Failed" on the next run without any
   separate cleanup step. `main.py` starts it automatically in a background
@@ -155,10 +184,12 @@ genre; `Anything` + `Anytime` shuffles the entire library.
 - `web/` - the browser UI: `index.html`/`style.css`/`app.js` (the remote --
   vanilla JS, no build step, polls `/api/status` or, in web mode, the
   session picker + `/api/sessions/...`; includes the DJ panel, an inline
-  song list toggled by the DJ button rather than a separate page), and
-  `player.html`/`player.js` (the web-mode browser player, opened via
-  "Launch Player" -- polls a session's `video_url` and plays it in a
-  `<video>` tag).
+  song list toggled by the "DJ Request" button rather than a separate
+  page; a Playlists section in the Library panel that reuses the Library
+  table's filter/checkbox-select pattern to build a playlist; and a
+  playlist dropdown next to "+ New Session"), and `player.html`/
+  `player.js` (the web-mode browser player, opened via "Launch Player" --
+  polls a session's `video_url` and plays it in a `<video>` tag).
 - `player.py` - `Player` (mpv subprocess wrapper: play / skip) and
   `BrowserPlayer` (web mode: blocks until the browser player tab reports
   the video ended or skip is pressed). `make_player()` picks between them
