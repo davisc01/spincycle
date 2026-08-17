@@ -15,30 +15,31 @@ video's been played once.
 **Status:** software (caching, playback, library, web remote) works
 today.
 
-## Deployment targets
+<p align="center">
+  <img src="images/Screenshot 1.png" alt="Spin Cycle remote -- genre and era dials" width="45%">
+  &nbsp;&nbsp;
+  <img src="images/Screenshot 2.png" alt="Spin Cycle Library panel -- track list and add-song form" width="45%">
+</p>
 
-This release focuses on two deployment targets, both sharing one codebase
-([`app/`](app/)) -- see each target's README for setup instructions:
+## Installation
 
-- **[Web (container)](deploy/container/README.md)** -- run the same
-  image on a home server, NAS, or Kubernetes cluster; a browser tab you
-  open becomes the player instead of mpv/DRM, and it supports multiple
+Spin Cycle ships as two deployment targets, both built from the same
+codebase ([`app/`](app/)) -- pick whichever fits how you want to run it,
+and follow that target's README for the actual install steps:
+
+- **[Web (container)](deploy/container/README.md)** -- run the image on
+  a home server, NAS, or Kubernetes cluster; a browser tab you open
+  becomes the player instead of mpv/DRM, and it supports multiple
   simultaneous viewers, each with their own session.
 - **[macOS (windowed app)](deploy/macos/README.md)** -- the same web-mode
-  experience as the container target, packaged as `Spin Cycle.app`: a
-  normal Mac app (Dock icon, Cmd-Q) whose window is the web remote --
-  runs on your Mac instead of a cluster, no Docker, no volumes, nothing
-  to provision if you've already got a Mac.
+  experience, packaged as `Spin Cycle.app`: a normal Mac app (Dock icon,
+  Cmd-Q) whose window is the web remote -- runs on your Mac, no Docker,
+  no volumes, nothing to provision if you've already got a Mac.
 
-A third target, **[Console (Raspberry Pi 4)](deploy/raspberrypi/README.md)**
--- one physical device plugged into a TV over HDMI, mpv rendering straight
-to the display via DRM/KMS -- previously shipped here and is **deferred to
-v1**. The code and installer aren't going anywhere, they're just out of
-scope for this release; see that README if you're deploying to a Pi anyway.
-
-A future deployment target (a different device, or a different install
-method) would be a new sibling under `deploy/` reusing the same `app/`
-codebase, not a fork of it.
+Once it's running, load your video library -- see "Using the web remote"
+below, and [`My_Video_List.csv`](My_Video_List.csv) in this repo for an
+example of a full library ready to import via the Library panel's Import
+CSV button.
 
 ## Using the web remote
 
@@ -51,7 +52,7 @@ paired with a dropdown to start from a saved playlist instead of the
 whole library -- see "Playlists" below), **Select** to open a session's
 own genre/era/skip/stop controls plus a **Launch Player** button,
 **Close** to tear one down -- since each browser tab/device gets its own
-independent selection and player (see `sessions.py`).
+independent selection and player.
 
 Picking a genre and an era starts playback automatically -- no separate
 confirm step, since picking from a dropdown is already a deliberate
@@ -61,9 +62,7 @@ track without changing the selection; Stop halts playback and returns to
 browsing. A Library button opens a sortable table of every track (with
 per-row Preview/Edit/Delete, an add-song form with a YouTube-search
 helper, and CSV export/import for bulk changes), a Playlists section
-(see below), plus the cache-warm trigger and playback log panels (see
-the deploy READMEs for how to reach the underlying data file directly,
-if needed).
+(see below), plus the cache-warm trigger and playback log panels.
 
 Below Skip/Stop, a **DJ Request** button opens an inline panel listing
 every song in the current genre/era, sorted by artist, with the
@@ -74,141 +73,39 @@ above the panel always shows what's coming up: whichever song you
 queued, or, if you haven't queued anything, a preview of the next
 randomly-shuffled pick.
 
-### Playlists
+### Library
 
-A **Playlists** section in the Library panel lets you build a named,
-reusable subset of the library: filter by genre/era, check off songs,
-and save. Starting a new session offers a dropdown to pick one of your
-saved playlists instead of the whole library -- once picked, the
-genre/era dials and shuffle work exactly as usual, just limited to that
-playlist's tracks for the life of that session. Editing or deleting a
-playlist afterward never affects a session already running from it, and
-there's no route to switch a live session's playlist -- close it and
-start a new one instead.
+The **Library** button opens a panel with everything for managing your
+video collection and the app's playback behavior:
+
+- **Tracks** -- a sortable table of every song in the library (Artist,
+  Song, Genre, Era, Cache status), with per-row Preview/Edit/Delete and
+  checkbox-based bulk delete. **+ Add song** opens a form for adding one
+  track at a time (with a "Search YouTube" helper that fills in the URL
+  for you to preview before saving). **Export CSV** downloads the whole
+  library as a CSV file; **Import CSV** loads one back in, either
+  appending to the existing library or replacing it outright -- see
+  [`My_Video_List.csv`](My_Video_List.csv) in this repo for an example
+  file in the expected format.
+- **Playlists** -- build a named, reusable subset of the library: filter
+  by genre/era, check off songs, and save. Starting a new session offers
+  a dropdown to pick one of your saved playlists instead of the whole
+  library -- once picked, the genre/era dials and shuffle work exactly
+  as usual, just limited to that playlist's tracks for the life of that
+  session. Editing or deleting a playlist afterward never affects a
+  session already running from it, and there's no route to switch a
+  live session's playlist -- close it and start a new one instead.
+- **Overlays** -- a logo + phrase banner (e.g. "Intermission...") shown
+  across the top of the player during playback. Only one overlay can be
+  active at a time.
+- **Cache warming** -- kicks off a background pass that downloads any
+  library track not already cached locally, so playback never has to
+  stall waiting on a first-time download.
+- **Playback log** -- a running log of what's played, skipped, or
+  failed to cache, for troubleshooting a session after the fact.
 
 Both the genre and era lists have one extra entry past the real values:
 **"Anything"** (genre) and **"Anytime"** (era). Picking either relaxes that
 half of the match -- e.g. genre `Rock` + era `Anytime` plays all Rock
 regardless of era; `Anything` + a specific era plays that era across every
 genre; `Anything` + `Anytime` shuffles the entire library.
-
-## Project layout
-
-- [`app/`](app/) - the Spin Cycle codebase itself, device-agnostic. Builds
-  one container image (`app/Dockerfile`) that the container target runs;
-  the macOS target runs the same code directly (no container) via
-  `py2app`. All paths below are relative to `app/` unless noted.
-- [`deploy/raspberrypi/`](deploy/raspberrypi/) - `install.sh` plus its
-  gitignored `data/` dir (fallback cache when no `--cache-root` is given)
-  -- see [`deploy/raspberrypi/README.md`](deploy/raspberrypi/README.md)
-  for hardware requirements and setup instructions. **Deferred to v1** for
-  this release (see "Deployment targets" above) -- kept here unchanged.
-- [`deploy/container/`](deploy/container/) - see
-  [`deploy/container/README.md`](deploy/container/README.md) for what the
-  image expects to run as a web deployment (env vars, volumes, port) plus
-  example `docker run`/Kubernetes sketches; the GitHub Actions workflow
-  that publishes this target's image is
-  `.github/workflows/build-container-image.yml`.
-- [`deploy/macos/`](deploy/macos/) - `build.sh` packages `app/` as
-  `Spin Cycle.app`, a normal windowed Mac app (Dock icon, Cmd-Q) whose
-  window is a `WKWebView` running the same web mode as the container
-  target -- see [`deploy/macos/README.md`](deploy/macos/README.md). All
-  three `deploy/` targets build and run the same `app/` codebase -- a
-  future deployment target would be a new sibling here too, rather than
-  forking it.
-- `config.py` - paths, yt-dlp format string, mpv settings. Edit this first.
-- `config/library.db` - your actual video library, a local SQLite file:
-  artist, song, genre, era, url, plus id and cache-status columns, plus
-  your saved playlists (a `playlists` table and a `playlist_tracks` join
-  table). Manage tracks from the app's Library panel (add/edit/delete/
-  preview per song); for bulk changes, use the panel's Export/Import CSV
-  buttons rather than editing the SQLite file directly. Manage playlists
-  from the Library panel's Playlists section.
-- `library.py` - loads `library.db` into the genre -> era -> tracks
-  structure, and resolves a genre/era pick (including the
-  "Anything"/"Anytime" wildcards) into a track list. Also exposes
-  `add_track()`/`update_track()`/`delete_track()`/`delete_tracks()` for
-  CRUD by id (the library's stable row id -- unlike a CSV, duplicate URLs
-  don't cause ambiguity), and `import_csv()`/`export_csv_rows()` for bulk
-  CSV import/export. An existing `library.csv` from before this file
-  existed is imported into it automatically, once, the first time the app
-  runs. Also exposes playlist CRUD (`create_playlist()`, etc.) and
-  `library_for_playlist()`, which returns that same genre -> era ->
-  tracks structure scoped to one playlist's tracks, for starting a
-  session limited to a playlist. Also runnable standalone to
-  sanity-check the library (`python3 library.py`).
-- `video_cache.py` - lazy caching layer. Also runnable standalone to
-  pre-warm the whole library (`python3 video_cache.py`).
-- `controller.py` - `SpinCycleController`, the live playback engine behind
-  the web remote: tracks the current genre/era/track, and shuffles/plays/
-  skips/stops on a background thread as selections change. `queue_next(url)`
-  lets the DJ panel cut a specific track ahead of the shuffle order;
-  `track_list()` returns the current genre/era's tracks (sorted by artist)
-  for that panel, alongside what's playing/queued. Logs each track
-  play/skip/error to `config.PLAYBACK_LOG`. Intentionally decoupled from
-  `input_device.py`'s `Event` model so a future GPIO dial input could
-  drive it too. Instance-scoped with no module-level globals, which is
-  what lets `sessions.py` run many of them concurrently in web mode.
-  Optionally constructed scoped to a saved playlist instead of the whole
-  library (see "Playlists" above) -- every other method is unaware of
-  the distinction.
-- `sessions.py` - `SessionManager`, web-mode only: owns one
-  `SpinCycleController` per session, keyed by a random adjective-animal
-  name (e.g. `clever-otter`) that doubles as its id. Not used in console
-  mode -- `main.py` wires up a single bare `SpinCycleController` there.
-  `create()` optionally accepts a playlist to scope the new session to.
-- `library_server.py` - LAN-only web server for the whole web remote:
-  serves `web/` (`index.html`/`style.css`/`app.js`/`player.html`/
-  `player.js`), a JSON API backed by either a single `SpinCycleController`
-  (console mode: `/api/status`, `/api/genre`, `/api/era`, `/api/skip`,
-  `/api/stop`, `/api/tracks`, `/api/queue-next`) or a `SessionManager` (web
-  mode: `/api/sessions`, `/api/sessions/<name>/status`, `/api/sessions/
-  <name>/{genre,era,skip,stop,tracks,queue-next,video-ended,close}`) --
-  `tracks`/`queue-next` back the DJ panel -- a range-request-capable
-  `/video/<file>` route serving cached videos to browser players, and the
-  library-management routes backing the Library panel (`/api/library-tracks`
-  for add/list, `/api/library-tracks/<id>/{update,delete}`,
-  `/api/library-tracks/bulk-delete`, `/api/library-tracks/search` for the
-  YouTube search-and-suggest helper, `/upload`/`/upload-append` for CSV
-  import, `/library.csv` for export, and `/warm-cache`), plus a
-  `/api/playlists` family backing the Playlists section (list/create/
-  rename/delete a playlist, update its tracks) -- web mode only.
-  `POST /api/sessions` accepts an optional `playlist_id` to scope the
-  new session to a saved playlist instead of the whole library. Each track's own
-  `cache_error` column reflects only its most recent warm-cache attempt, so
-  a fixed track's row stops showing "Failed" on the next run without any
-  separate cleanup step. `main.py` starts it automatically in a background
-  thread; it's also runnable standalone (`python3 library_server.py`) for
-  library maintenance without full playback (the controller-backed routes
-  503 in that mode).
-- `web/` - the browser UI: `index.html`/`style.css`/`app.js` (the remote --
-  vanilla JS, no build step, polls `/api/status` or, in web mode, the
-  session picker + `/api/sessions/...`; includes the DJ panel, an inline
-  song list toggled by the "DJ Request" button rather than a separate
-  page; a Playlists section in the Library panel that reuses the Library
-  table's filter/checkbox-select pattern to build a playlist; and a
-  playlist dropdown next to "+ New Session"), and `player.html`/
-  `player.js` (the web-mode browser player, opened via "Launch Player" --
-  polls a session's `video_url` and plays it in a `<video>` tag).
-- `player.py` - `Player` (mpv subprocess wrapper: play / skip) and
-  `BrowserPlayer` (web mode: blocks until the browser player tab reports
-  the video ended or skip is pressed). `make_player()` picks between them
-  based on `config.PLAYBACK_MODE`.
-- `input_device.py` - input abstraction. `KeyboardInput`, built for a
-  discrete menu model, not used by `main.py`.
-- `menu.py` - dev/testing-only terminal keyboard mockup, superseded by
-  the web remote -- run directly with `python3 menu.py`, not started by
-  `main.py`.
-- `main.py` - entry point, dependency check, creates the
-  `SpinCycleController` and starts `library_server.py` in the background,
-  then just waits (the web remote owns all interactivity).
-
-## Why H.264, not VP9/AV1 (console mode only)
-
-Console mode (the deferred-to-v1 Raspberry Pi target) forces yt-dlp to grab
-the H.264 variant of each video, since the Pi 4's hardware decoder can't
-handle VP9/AV1 -- see `config.FORMAT_SELECTOR`. Not a concern for the
-container/macOS targets this release ships: decoding happens client-side in
-the viewer's own browser, so web mode uses a looser selector (up to 4K, any
-codec) instead. See
-[`deploy/container/README.md`](deploy/container/README.md).
