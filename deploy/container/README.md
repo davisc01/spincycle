@@ -1,14 +1,13 @@
 # Container (web) deployment target
 
-Unlike `deploy/raspberrypi/` (a self-contained install script for one
-physical device), this target is just "run the same `app/` image
-somewhere with `SPINCYCLE_PLAYBACK_MODE=web`" -- no mpv, no DRM/ALSA, no
-privileged access to host devices needed. A browser tab you open via
-"Launch Player" becomes the player instead (see `player.py`'s
-`BrowserPlayer` and `sessions.py`). That makes it a good fit for a NAS,
-a home server, a Docker/Podman host, or any Kubernetes distribution --
-pick whichever fits your own infrastructure. This directory intentionally
-doesn't prescribe one.
+This target is "run the `app/` image somewhere with
+`SPINCYCLE_PLAYBACK_MODE=web`" -- no mpv, no DRM/ALSA, no privileged
+access to host devices needed. A browser tab you open via "Launch
+Player" becomes the player instead (see `player.py`'s `BrowserPlayer`
+and `sessions.py`). That makes it a good fit for a NAS, a home server, a
+Docker/Podman host, or any Kubernetes distribution -- pick whichever
+fits your own infrastructure. This directory intentionally doesn't
+prescribe one.
 
 This repo only builds and publishes the image -- via
 [`.github/workflows/build-container-image.yml`](../../.github/workflows/build-container-image.yml),
@@ -53,34 +52,137 @@ docker run -d --name spincycle \
   ghcr.io/davisc01/spincycle:latest
 ```
 
-(substitute `podman` for `docker` if that's your runtime -- no
-`--privileged`/`--network host`/device bind-mounts needed here, unlike
-`deploy/raspberrypi/install.sh`; this target doesn't touch DRM/ALSA/the
-physical console at all).
+Substitute `podman` for `docker` if that's your runtime -- the command is
+identical either way, no `--privileged`/`--network host`/device
+bind-mounts needed; this target doesn't touch DRM/ALSA/any host device at
+all.
+
+Named volumes (`spincycle-config`, `spincycle-cache` above) are enough for
+a single host. If you'd rather bind-mount host directories instead, swap
+in `-v /path/on/host/config:/app/config` / `-v
+/path/on/host/cache:/cache`.
+
+### Docker Compose
+
+```yaml
+services:
+  spincycle:
+    image: ghcr.io/davisc01/spincycle:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      SPINCYCLE_PLAYBACK_MODE: web
+      SPINCYCLE_CACHE_ROOT: /cache
+    volumes:
+      - spincycle-config:/app/config
+      - spincycle-cache:/cache
+
+volumes:
+  spincycle-config:
+  spincycle-cache:
+```
+
+```bash
+docker compose up -d
+```
+
+To pick up a newly published image:
+
+```bash
+docker compose pull && docker compose up -d
+```
 
 ## Running it on Kubernetes
 
-Roughly, you want:
+Minimal manifest set -- a `Deployment` pinned to one replica (see
+"Single replica only" below), two `PersistentVolumeClaim`s, and a
+`ClusterIP` `Service`:
 
-- A `Deployment` running `ghcr.io/davisc01/spincycle:latest` with
-  `SPINCYCLE_PLAYBACK_MODE=web` and `SPINCYCLE_CACHE_ROOT=/cache` set,
-  **`replicas: 1`** (see "Single replica only" below -- this is a hard
-  requirement, not a default to bump), exposing container port 80.
-- Two `PersistentVolumeClaim`s mounted into the pod: one at `/cache`
-  (video cache -- gets large, size it for your library), one at
-  `/app/config` (small -- just `library.db`/`settings.json`).
-  Any `StorageClass` your cluster provides works; there's nothing
-  Spin-Cycle-specific about the storage.
-- A `Service` (ClusterIP is enough if you're fronting it with your own
-  Ingress/LoadBalancer setup) exposing port 80.
-- However you deploy manifests already -- `kubectl apply`, Argo CD, Flux,
-  Helm, plain YAML in another repo -- works the same way here; nothing
-  about the image assumes a particular GitOps tool or cluster.
-
-After a push here builds a new image, roll it out with whatever your
-deploy tooling uses, e.g.:
-
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spincycle-config
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spincycle-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Gi # size for your library
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spincycle
+spec:
+  replicas: 1 # hard requirement, not a default to bump -- see below
+  strategy:
+    type: Recreate # avoid two pods briefly sharing the ReadWriteOnce PVCs during a rollout
+  selector:
+    matchLabels:
+      app: spincycle
+  template:
+    metadata:
+      labels:
+        app: spincycle
+    spec:
+      containers:
+        - name: spincycle
+          image: ghcr.io/davisc01/spincycle:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: SPINCYCLE_PLAYBACK_MODE
+              value: web
+            - name: SPINCYCLE_CACHE_ROOT
+              value: /cache
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: spincycle-config
+        - name: cache
+          persistentVolumeClaim:
+            claimName: spincycle-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spincycle
+spec:
+  selector:
+    app: spincycle
+  ports:
+    - port: 80
+      targetPort: 80
 ```
+
+Front the `Service` with whatever `Ingress`/`LoadBalancer` your cluster
+already uses to reach it beyond `kubectl port-forward` -- put auth in
+front of it there too (see "Security" below). Any `StorageClass` your
+cluster provides works for the PVCs; there's nothing Spin-Cycle-specific
+about the storage. However you apply manifests already -- `kubectl
+apply -f`, Argo CD, Flux, Helm, plain YAML in another repo -- works the
+same way here; nothing about the image assumes a particular GitOps tool.
+
+After a push to `main` here builds a new image, roll it out with
+whatever your deploy tooling uses, e.g.:
+
+```bash
 kubectl rollout restart deployment/spincycle
 ```
 
