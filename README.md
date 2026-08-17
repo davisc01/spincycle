@@ -35,6 +35,10 @@ and follow that target's README for the actual install steps:
   experience, packaged as `Spin Cycle.app`: a normal Mac app (Dock icon,
   Cmd-Q) whose window is the web remote -- runs on your Mac, no Docker,
   no volumes, nothing to provision if you've already got a Mac.
+- **[Windows (windowed app)](deploy/windows/README.md)** -- the same
+  web-mode experience, packaged as `Spin Cycle.exe`: a normal Windows app
+  whose window is the web remote -- runs on your PC, no Docker, no
+  volumes, nothing to provision if you've already got a Windows machine.
 
 Once it's running, load your video library -- see "Using the web remote"
 below, and [`My_Video_List.csv`](My_Video_List.csv) in this repo for an

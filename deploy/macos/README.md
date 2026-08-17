@@ -1,7 +1,7 @@
 # macOS (windowed app) deployment target
 
-A third sibling to `deploy/raspberrypi/` and `deploy/container/`, reusing
-the same [`app/`](../../app/) codebase unchanged: `Spin Cycle.app` runs
+A sibling to `deploy/container/`, reusing the same
+[`app/`](../../app/) codebase unchanged: `Spin Cycle.app` runs
 `library_server.py` in web mode (`SPINCYCLE_PLAYBACK_MODE=web`, same as
 `deploy/container` -- no mpv, no DRM/ALSA, decoding happens client-side)
 as a background process on your Mac, with a real window (a `WKWebView`
@@ -19,8 +19,8 @@ description and "Using the web remote" for how the session picker works.
 
 ## Why this exists
 
-Not everyone trying Spin Cycle has a home server, a k8s cluster, or a
-spare Raspberry Pi. If you've already got a Mac, this gets you the same
+Not everyone trying Spin Cycle has a home server or a k8s cluster.
+If you've already got a Mac, this gets you the same
 multi-viewer web experience as `deploy/container` with nothing to
 provision -- no Docker/Podman, no volumes to wire up, no port-forwarding
 through a router. Build it once, double-click it, done.
@@ -71,7 +71,7 @@ quit: **Cmd-Q**, or **Spin Cycle -> Quit Spin Cycle** in the menu bar. The
 
 ## Where things live
 
-Unlike the Pi/container targets (bind-mounted `app/config`, a PVC), a
+Unlike the container target (bind-mounted `app/config`, a PVC), a
 packaged `.app`'s own `Contents/Resources` isn't a sensible place to keep
 a growing library or cache -- rebuilding the app would wipe it, and
 per-user data doesn't belong inside an app bundle at all. Instead:
@@ -97,7 +97,7 @@ Port 80 is privileged on macOS same as Linux (`config.py`'s
 `LIBRARY_SERVER_PORT` comment). Rather than requiring `sudo` or a setcap
 equivalent just to launch a normal app, this target sets
 `SPINCYCLE_SERVER_PORT=8080` (a new env override in `config.py`, additive
--- the Pi/container targets are untouched and keep defaulting to 80). The
+-- the container target is untouched and keeps defaulting to 80). The
 app's own window always points at `http://localhost:8080/`; another
 device on your LAN reaches the same server at
 `http://<hostname>.local:8080/` (check `System Settings -> General ->

@@ -1,0 +1,8 @@
+# Build-time-only deps for the Windows deployment target -- installed
+# alongside ../../app/requirements.txt into build.ps1's throwaway venv.
+# Not needed by the container/macOS targets.
+
+pywebview     # native window shell around the web remote (see app.py)
+pythonnet     # pywebview's Windows backend (EdgeChromium) needs this for the .NET/WebView2 interop
+pyinstaller   # packages app.py + app/ into dist/Spin Cycle/
+pillow        # icon generation (generate_icon.py)
