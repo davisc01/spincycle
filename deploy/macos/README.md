@@ -33,6 +33,14 @@ it, and drag `Spin Cycle.app` to Applications -- the "Prerequisites"/
 "Build and run" sections below are only needed if you're building from
 source instead.
 
+Since the app isn't notarized (see "Sharing the built app with someone
+else" below), the first launch will be blocked by Gatekeeper with **"Apple
+cannot check it for malicious software."** To get past this one-time
+check: in Applications, **right-click (or Control-click) `Spin Cycle.app`
+and choose Open**, then click **Open** again in the confirmation dialog --
+don't just double-click it. You only need to do this once; after that it
+launches normally.
+
 ## Prerequisites
 
 - macOS with Xcode Command Line Tools (`xcode-select --install` if you
