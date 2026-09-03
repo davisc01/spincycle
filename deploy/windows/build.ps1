@@ -1,7 +1,10 @@
-# Build "Spin Cycle.exe": venv -> deps -> icon.ico -> PyInstaller -> zip.
+# Build "Spin Cycle.exe": venv -> deps -> icon.ico -> PyInstaller ->
+# installer + zip.
 #
 # Usage: .\build.ps1
-# Output: dist\Spin Cycle\Spin Cycle.exe, zipped to dist\Spin Cycle-windows.zip
+# Output: dist\Spin Cycle\Spin Cycle.exe, packaged as an installer
+# (dist\Spin Cycle-Setup.exe) and a portable zip (dist\Spin
+# Cycle-windows.zip)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
@@ -65,7 +68,21 @@ $zipPath = "dist\Spin Cycle-windows.zip"
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 Compress-Archive -Path "dist\Spin Cycle" -DestinationPath $zipPath
 
+# --- Installer: Inno Setup wraps the whole onedir output (exe +
+# _internal) into a normal Program-Files installer with a Start Menu
+# entry and an Add/Remove Programs uninstaller -- see installer.iss.
+$iscc = Get-Command iscc -ErrorAction SilentlyContinue
+if (-not $iscc) {
+    $fallback = "${Env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+    if (Test-Path $fallback) { $iscc = $fallback }
+}
+if (-not $iscc) {
+    throw "Inno Setup (ISCC.exe) not found -- install it: winget install JRSoftware.InnoSetup"
+}
+& $iscc installer.iss
+
 Write-Host ""
 Write-Host "Built: $PSScriptRoot\dist\Spin Cycle\Spin Cycle.exe"
-Write-Host "Zipped for sharing: $PSScriptRoot\$zipPath"
+Write-Host "Installer: $PSScriptRoot\dist\Spin Cycle-Setup.exe"
+Write-Host "Zipped for sharing (portable, no install): $PSScriptRoot\$zipPath"
 Write-Host "Run it: & 'dist\Spin Cycle\Spin Cycle.exe'"

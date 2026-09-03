@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build Spin Cycle.app: venv -> deps -> icon.icns -> py2app.
+# Build Spin Cycle.app: venv -> deps -> icon.icns -> py2app -> DMG.
 #
 # Usage: ./build.sh
-# Output: dist/Spin Cycle.app
+# Output: dist/Spin Cycle.app, packaged as dist/Spin Cycle-macos.dmg
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -86,7 +86,35 @@ rm -f "$BUNDLED_APP/Dockerfile" "$BUNDLED_APP/.dockerignore"
 # paid account needed) now that the bundle's final contents are settled.
 codesign --force --deep --sign - "dist/Spin Cycle.app"
 
+# --- DMG: a Finder window with the .app next to an /Applications
+# symlink, the standard macOS drag-to-install convention.
+if ! command -v create-dmg >/dev/null 2>&1; then
+    echo "Error: create-dmg not found. Install it: brew install create-dmg" >&2
+    exit 1
+fi
+DMG_PATH="dist/Spin Cycle-macos.dmg"
+rm -f "$DMG_PATH"
+# create-dmg drives Finder over AppleScript to lay out icons, which is
+# known to sometimes exit non-zero even though the DMG came out fine --
+# so don't let `set -e` trust the exit code alone; check for the file.
+set +e
+create-dmg \
+    --volname "Spin Cycle" \
+    --volicon "icon.icns" \
+    --window-size 660 400 \
+    --icon-size 128 \
+    --icon "Spin Cycle.app" 160 185 \
+    --app-drop-link 500 185 \
+    "$DMG_PATH" \
+    "dist/Spin Cycle.app"
+set -e
+if [ ! -f "$DMG_PATH" ]; then
+    echo "Error: create-dmg did not produce $DMG_PATH" >&2
+    exit 1
+fi
+
 deactivate
 echo ""
 echo "Built: $(pwd)/dist/Spin Cycle.app"
+echo "DMG for sharing: $(pwd)/$DMG_PATH"
 echo "Launch it from Finder, or: open 'dist/Spin Cycle.app'"

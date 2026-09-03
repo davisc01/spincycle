@@ -24,6 +24,14 @@ the same multi-viewer web experience as `deploy/container` with nothing
 to provision -- no Docker/Podman, no volumes to wire up, no
 port-forwarding through a router. Build it once, double-click it, done.
 
+## Download
+
+Don't want to build it yourself? Grab `Spin Cycle-Setup.exe` (installer)
+or `Spin Cycle-windows.zip` (portable, no install) from the
+**[Releases page](https://github.com/davisc01/spincycle/releases)**, run
+it, and you're done -- the "Prerequisites"/"Build and run" sections below
+are only needed if you're building from source instead.
+
 ## Prerequisites
 
 - **Python 3.10 or 3.11** (`build.ps1` prefers these, via the `py`
@@ -41,13 +49,17 @@ port-forwarding through a router. Build it once, double-click it, done.
   WebView2-related error, install the [Evergreen
   Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/)
   from Microsoft.
+- **Inno Setup**, on `PATH` as `iscc` (or installed to its default
+  location): `winget install JRSoftware.InnoSetup`. Used by `build.ps1`
+  to build the installer -- already preinstalled on GitHub's
+  `windows-latest` Actions runners, so only needed for local builds.
 
 ## Build and run
 
 ```powershell
 cd deploy\windows
 .\build.ps1
-& "dist\Spin Cycle\Spin Cycle.exe"
+.\dist\Spin Cycle-Setup.exe
 ```
 
 `build.ps1` creates a throwaway venv (`.venv-build\`, gitignored),
@@ -55,9 +67,14 @@ installs `app\requirements.txt` plus this directory's build-time deps
 (`pywebview`, `pythonnet`, `pyinstaller`, `pillow`), crops one dial out of
 the existing `app/images/spin_cycle_icon_1024.png` artwork for the app
 icon (same artwork/crop the macOS target uses, converted straight to
-`.ico` via Pillow), runs PyInstaller (`--onedir`), and zips the result to
-`dist\Spin Cycle-windows.zip`. Re-run it any time you change code under
-`app/` -- it rebuilds clean each time.
+`.ico` via Pillow), runs PyInstaller (`--onedir`), and packages the
+result two ways: an installer (`dist\Spin Cycle-Setup.exe`, via Inno
+Setup and `installer.iss` -- installs to Program Files with a Start Menu
+shortcut and a normal Add/Remove Programs uninstaller, this is what you
+want for a real install) and a portable zip (`dist\Spin
+Cycle-windows.zip` -- unzip and run `Spin Cycle.exe` in place, no
+install/uninstall). Re-run it any time you change code under `app/` --
+it rebuilds clean each time.
 
 Launching opens a window with the web remote in it -- the same session
 picker you'd see in a browser. Unlike the macOS target's Dock-icon
@@ -118,7 +135,8 @@ memory, not shared storage. Don't run two copies pointed at the same
 
 ## Sharing the built app with someone else
 
-Handing your `dist\Spin Cycle-windows.zip` to another Windows user
+Handing your `dist\Spin Cycle-Setup.exe` to another Windows user (or the
+portable `dist\Spin Cycle-windows.zip`, if they'd rather not install)
 works, but Windows SmartScreen will likely block the first launch with
 **"Windows protected your PC"** -- this build isn't signed with a paid
 code-signing certificate. The recipient needs to click **More info ->

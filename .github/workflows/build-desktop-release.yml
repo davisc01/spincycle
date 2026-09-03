@@ -1,9 +1,10 @@
 name: Build and release Spin Cycle (Windows/macOS desktop apps)
 
 # Manual only: builds deploy/windows/ and deploy/macos/ at the given git
-# tag and publishes both zips as assets on that tag's GitHub Release
-# (created if it doesn't exist yet). Re-run against an already-released
-# tag to rebuild and replace both assets.
+# tag and publishes the Windows installer + portable zip and the macOS
+# DMG as assets on that tag's GitHub Release (created if it doesn't exist
+# yet). Re-run against an already-released tag to rebuild and replace all
+# three assets.
 
 on:
   workflow_dispatch:
@@ -28,8 +29,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-zip
-          path: deploy/windows/dist/Spin Cycle-windows.zip
+          name: windows-build
+          path: |
+            deploy/windows/dist/Spin Cycle-windows.zip
+            deploy/windows/dist/Spin Cycle-Setup.exe
           if-no-files-found: error
 
   build-macos:
@@ -39,18 +42,17 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
-      - name: Build Spin Cycle.app
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build Spin Cycle.app and DMG
         working-directory: deploy/macos
         run: ./build.sh
 
-      - name: Zip app bundle
-        working-directory: deploy/macos/dist
-        run: ditto -c -k --keepParent "Spin Cycle.app" "Spin Cycle-macos.zip"
-
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-zip
-          path: deploy/macos/dist/Spin Cycle-macos.zip
+          name: macos-build
+          path: deploy/macos/dist/Spin Cycle-macos.dmg
           if-no-files-found: error
 
   publish-release:
@@ -69,4 +71,5 @@ jobs:
           tag_name: ${{ inputs.tag }}
           files: |
             artifacts/Spin Cycle-windows.zip
-            artifacts/Spin Cycle-macos.zip
+            artifacts/Spin Cycle-Setup.exe
+            artifacts/Spin Cycle-macos.dmg

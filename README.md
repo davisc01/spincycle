@@ -23,7 +23,7 @@ today.
 
 ## Installation
 
-Spin Cycle ships as two deployment targets, both built from the same
+Spin Cycle ships as three deployment targets, all built from the same
 codebase ([`app/`](app/)) -- pick whichever fits how you want to run it,
 and follow that target's README for the actual install steps:
 
@@ -39,6 +39,13 @@ and follow that target's README for the actual install steps:
   web-mode experience, packaged as `Spin Cycle.exe`: a normal Windows app
   whose window is the web remote -- runs on your PC, no Docker, no
   volumes, nothing to provision if you've already got a Windows machine.
+
+The macOS and Windows targets don't have to be built from source --
+prebuilt downloads (a `Spin Cycle-Setup.exe` installer and portable zip
+for Windows, a `Spin Cycle-macos.dmg` for macOS) are published on the
+**[Releases page](https://github.com/davisc01/spincycle/releases)** for
+each tagged version; see those targets' READMEs for what to do once
+you've installed one.
 
 Once it's running, load your video library -- see "Using the web remote"
 below, and [`My_Video_List.csv`](My_Video_List.csv) in this repo for an

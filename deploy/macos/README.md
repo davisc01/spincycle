@@ -25,6 +25,14 @@ multi-viewer web experience as `deploy/container` with nothing to
 provision -- no Docker/Podman, no volumes to wire up, no port-forwarding
 through a router. Build it once, double-click it, done.
 
+## Download
+
+Don't want to build it yourself? Grab `Spin Cycle-macos.dmg` from the
+**[Releases page](https://github.com/davisc01/spincycle/releases)**, open
+it, and drag `Spin Cycle.app` to Applications -- the "Prerequisites"/
+"Build and run" sections below are only needed if you're building from
+source instead.
+
 ## Prerequisites
 
 - macOS with Xcode Command Line Tools (`xcode-select --install` if you
@@ -39,13 +47,15 @@ through a router. Build it once, double-click it, done.
   fails to cache (`ERROR: ... ffmpeg is not installed`). `build.sh` warns
   if it's missing but still builds, since the app should come up either
   way (see `config.cache_root_problem()`).
+- **create-dmg**, via Homebrew: `brew install create-dmg`. Used by
+  `build.sh` to build the installer DMG.
 
 ## Build and run
 
 ```bash
 cd deploy/macos
 ./build.sh
-open "dist/Spin Cycle.app"
+open "dist/Spin Cycle-macos.dmg"
 ```
 
 `build.sh` creates a throwaway venv (`.venv-build/`, gitignored), installs
@@ -53,9 +63,14 @@ open "dist/Spin Cycle.app"
 the PyObjC Cocoa/WebKit bindings, `pillow`), crops one dial out of the
 existing `app/images/spin_cycle_icon_1024.png` artwork for the app icon
 (the full two-dial strip goes illegible once shrunk to Dock/Finder sizes;
-a single dial reads fine), and runs `py2app`. Re-run it any time you
-change code under `app/` -- it rebuilds clean each time (`rm -rf build
-dist` first).
+a single dial reads fine), runs `py2app`, and packages the signed bundle
+into `dist/Spin Cycle-macos.dmg` (via `create-dmg` -- a Finder window
+with `Spin Cycle.app` next to an `/Applications` symlink, the standard
+drag-to-install convention). Re-run it any time you change code under
+`app/` -- it rebuilds clean each time (`rm -rf build dist` first).
+Opening the DMG and dragging the app to Applications is the normal way to
+install it; `dist/Spin Cycle.app` is still there directly too if you'd
+rather just run it in place without installing.
 
 Launching opens a normal window with the web remote in it -- the same
 session picker you'd see in a browser. Closing the window doesn't quit
@@ -124,23 +139,24 @@ instance -- just don't try to run two copies pointed at the same
 
 ## Sharing the built app with someone else
 
-Handing your `dist/Spin Cycle.app` to another Mac user (AirDrop, a zip
-over email, etc.) works, but macOS Gatekeeper will block the first launch
-with **"Apple cannot check it for malicious software"** -- this build
-is only ad-hoc signed (enough to run on your own machine), not signed
-with a paid Apple Developer ID or notarized. The recipient needs to
-right-click the app and choose **Open** (instead of double-clicking) the
-first time to bypass that. There's no way around this without enrolling
-in Apple's $99/yr Developer Program and notarizing the build -- same cost
-floor as the tvOS/iOS distribution friction discussed for those targets.
+Handing your `dist/Spin Cycle-macos.dmg` to another Mac user (AirDrop,
+a download link, etc.) works, but macOS Gatekeeper will block the first
+launch with **"Apple cannot check it for malicious software"** -- this
+build is only ad-hoc signed (enough to run on your own machine), not
+signed with a paid Apple Developer ID or notarized. The recipient needs
+to right-click the app and choose **Open** (instead of double-clicking)
+the first time to bypass that. There's no way around this without
+enrolling in Apple's $99/yr Developer Program and notarizing the build --
+same cost floor as the tvOS/iOS distribution friction discussed for those
+targets.
 
-(`build.sh` re-signs the bundle as its last step, after stripping a
-couple of build-only files out of it -- editing a signed bundle's
-contents invalidates its signature, and Gatekeeper enforces that strictly
-on anything that picks up a quarantine flag, which is exactly what
-AirDrop/a zip/a download does. Skipping that re-sign step would make a
-shared copy fail with "Spin Cycle is damaged and can't be opened" instead
-of the expected right-click-to-open prompt.)
+(`build.sh` re-signs the bundle right after stripping a couple of
+build-only files out of it, before building the DMG -- editing a signed
+bundle's contents invalidates its signature, and Gatekeeper enforces that
+strictly on anything that picks up a quarantine flag, which is exactly
+what AirDrop/a zip/a download does. Skipping that re-sign step would make
+a shared copy fail with "Spin Cycle is damaged and can't be opened"
+instead of the expected right-click-to-open prompt.)
 
 ## Security
 
