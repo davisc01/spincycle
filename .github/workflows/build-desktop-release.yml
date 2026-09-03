@@ -21,9 +21,10 @@ jobs:
           ref: ${{ inputs.tag }}
 
       - name: Build Spin Cycle.exe
-        working-directory: deploy\windows
         shell: pwsh
-        run: .\build.ps1
+        run: |
+          cd deploy\windows
+          .\build.ps1
 
       - uses: actions/upload-artifact@v4
         with:
