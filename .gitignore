@@ -43,5 +43,11 @@ deploy/macos/icon.icns
 deploy/macos/icon.iconset/
 deploy/macos/icon_source.png
 
+# deploy/windows build output (build.ps1 regenerates all of this)
+deploy/windows/.venv-build/
+deploy/windows/build/
+deploy/windows/dist/
+deploy/windows/icon.ico
+
 # Local Claude Code guidance -- not part of the public-facing repo
 CLAUDE.md

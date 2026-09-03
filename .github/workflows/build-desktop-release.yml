@@ -1,0 +1,71 @@
+name: Build and release Spin Cycle (Windows/macOS desktop apps)
+
+# Manual only: builds deploy/windows/ and deploy/macos/ at the given git
+# tag and publishes both zips as assets on that tag's GitHub Release
+# (created if it doesn't exist yet). Re-run against an already-released
+# tag to rebuild and replace both assets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Git tag to build and release (e.g. v2.3)'
+        required: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Build Spin Cycle.exe
+        working-directory: deploy/windows
+        shell: pwsh
+        run: .\build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: deploy/windows/dist/Spin Cycle-windows.zip
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Build Spin Cycle.app
+        working-directory: deploy/macos
+        run: ./build.sh
+
+      - name: Zip app bundle
+        working-directory: deploy/macos/dist
+        run: ditto -c -k --keepParent "Spin Cycle.app" "Spin Cycle-macos.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: deploy/macos/dist/Spin Cycle-macos.zip
+          if-no-files-found: error
+
+  publish-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            artifacts/Spin Cycle-windows.zip
+            artifacts/Spin Cycle-macos.zip
