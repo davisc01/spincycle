@@ -1,10 +1,10 @@
 name: Build and release Spin Cycle (Windows/macOS desktop apps)
 
 # Manual only: builds deploy/windows/ and deploy/macos/ at the given git
-# tag and publishes the Windows installer + portable zip, the macOS DMG,
-# and the sample My_Video_List.csv library as assets on that tag's GitHub
-# Release (created if it doesn't exist yet). Re-run against an
-# already-released tag to rebuild and replace all assets.
+# tag and publishes the Windows installer, the macOS DMG, and the sample
+# My_Video_List.csv library as assets on that tag's GitHub Release
+# (created if it doesn't exist yet). Re-run against an already-released
+# tag to rebuild and replace all assets.
 
 on:
   workflow_dispatch:
@@ -30,9 +30,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: |
-            deploy/windows/dist/Spin Cycle-windows.zip
-            deploy/windows/dist/Spin Cycle-Setup.exe
+          path: deploy/windows/dist/Spin Cycle-Windows-Setup.exe
           if-no-files-found: error
 
   build-macos:
@@ -74,7 +72,6 @@ jobs:
         with:
           tag_name: ${{ inputs.tag }}
           files: |
-            artifacts/Spin Cycle-windows.zip
-            artifacts/Spin Cycle-Setup.exe
+            artifacts/Spin Cycle-Windows-Setup.exe
             artifacts/Spin Cycle-macos.dmg
             My_Video_List.csv

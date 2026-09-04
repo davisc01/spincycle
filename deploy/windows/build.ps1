@@ -1,10 +1,9 @@
 # Build "Spin Cycle.exe": venv -> deps -> icon.ico -> PyInstaller ->
-# installer + zip.
+# installer.
 #
 # Usage: .\build.ps1
 # Output: dist\Spin Cycle\Spin Cycle.exe, packaged as an installer
-# (dist\Spin Cycle-Setup.exe) and a portable zip (dist\Spin
-# Cycle-windows.zip)
+# (dist\Spin Cycle-Windows-Setup.exe)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
@@ -64,10 +63,6 @@ if ($bundledApp) {
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $bundledApp.FullName ".dockerignore")
 }
 
-$zipPath = "dist\Spin Cycle-windows.zip"
-if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-Compress-Archive -Path "dist\Spin Cycle" -DestinationPath $zipPath
-
 # --- Installer: Inno Setup wraps the whole onedir output (exe +
 # _internal) into a normal Program-Files installer with a Start Menu
 # entry and an Add/Remove Programs uninstaller -- see installer.iss.
@@ -83,6 +78,5 @@ if (-not $iscc) {
 
 Write-Host ""
 Write-Host "Built: $PSScriptRoot\dist\Spin Cycle\Spin Cycle.exe"
-Write-Host "Installer: $PSScriptRoot\dist\Spin Cycle-Setup.exe"
-Write-Host "Zipped for sharing (portable, no install): $PSScriptRoot\$zipPath"
+Write-Host "Installer: $PSScriptRoot\dist\Spin Cycle-Windows-Setup.exe"
 Write-Host "Run it: & 'dist\Spin Cycle\Spin Cycle.exe'"

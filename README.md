@@ -41,8 +41,8 @@ and follow that target's README for the actual install steps:
   volumes, nothing to provision if you've already got a Windows machine.
 
 The macOS and Windows targets don't have to be built from source --
-prebuilt downloads (a `Spin Cycle-Setup.exe` installer and portable zip
-for Windows, a `Spin Cycle-macos.dmg` for macOS) are published on the
+prebuilt downloads (a `Spin Cycle-Windows-Setup.exe` installer for
+Windows, a `Spin Cycle-macos.dmg` for macOS) are published on the
 **[Releases page](https://github.com/davisc01/spincycle/releases)** for
 each tagged version; see those targets' READMEs for what to do once
 you've installed one.

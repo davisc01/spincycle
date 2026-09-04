@@ -26,11 +26,10 @@ port-forwarding through a router. Build it once, double-click it, done.
 
 ## Download
 
-Don't want to build it yourself? Grab `Spin Cycle-Setup.exe` (installer)
-or `Spin Cycle-windows.zip` (portable, no install) from the
-**[Releases page](https://github.com/davisc01/spincycle/releases)**, run
-it, and you're done -- the "Prerequisites"/"Build and run" sections below
-are only needed if you're building from source instead.
+Don't want to build it yourself? Grab `Spin Cycle-Windows-Setup.exe` from
+the **[Releases page](https://github.com/davisc01/spincycle/releases)**,
+run it, and you're done -- the "Prerequisites"/"Build and run" sections
+below are only needed if you're building from source instead.
 
 ## Prerequisites
 
@@ -59,7 +58,7 @@ are only needed if you're building from source instead.
 ```powershell
 cd deploy\windows
 .\build.ps1
-.\dist\Spin Cycle-Setup.exe
+.\dist\Spin Cycle-Windows-Setup.exe
 ```
 
 `build.ps1` creates a throwaway venv (`.venv-build\`, gitignored),
@@ -68,13 +67,10 @@ installs `app\requirements.txt` plus this directory's build-time deps
 the existing `app/images/spin_cycle_icon_1024.png` artwork for the app
 icon (same artwork/crop the macOS target uses, converted straight to
 `.ico` via Pillow), runs PyInstaller (`--onedir`), and packages the
-result two ways: an installer (`dist\Spin Cycle-Setup.exe`, via Inno
+result as an installer (`dist\Spin Cycle-Windows-Setup.exe`, via Inno
 Setup and `installer.iss` -- installs to Program Files with a Start Menu
-shortcut and a normal Add/Remove Programs uninstaller, this is what you
-want for a real install) and a portable zip (`dist\Spin
-Cycle-windows.zip` -- unzip and run `Spin Cycle.exe` in place, no
-install/uninstall). Re-run it any time you change code under `app/` --
-it rebuilds clean each time.
+shortcut and a normal Add/Remove Programs uninstaller). Re-run it any
+time you change code under `app/` -- it rebuilds clean each time.
 
 Launching opens a window with the web remote in it -- the same session
 picker you'd see in a browser. Unlike the macOS target's Dock-icon
@@ -135,8 +131,7 @@ memory, not shared storage. Don't run two copies pointed at the same
 
 ## Sharing the built app with someone else
 
-Handing your `dist\Spin Cycle-Setup.exe` to another Windows user (or the
-portable `dist\Spin Cycle-windows.zip`, if they'd rather not install)
+Handing your `dist\Spin Cycle-Windows-Setup.exe` to another Windows user
 works, but Windows SmartScreen will likely block the first launch with
 **"Windows protected your PC"** -- this build isn't signed with a paid
 code-signing certificate. The recipient needs to click **More info ->
