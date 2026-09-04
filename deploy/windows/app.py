@@ -15,12 +15,16 @@ window is just this PC's own client.
 
 Unlike deploy/macos/app.py's raw WKWebView, WebView2 is a full Chromium
 engine -- JS alert()/confirm()/<input type="file"> already work without
-any custom delegate code. window.open() (the "Launch Player" button, see
-app/web/app.js) is handled by pywebview's default external-link handling
-(webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"]), which sends it to
-the system default browser rather than a second native window -- simpler
-than macOS's popup-window dance, and still gets the player onto its own
-tab.
+any custom delegate code. The "Launch Player" button (see app/web/app.js)
+calls window.pywebview.api.open_external() -- the _Api.open_external()
+js_api bridge below, which does a plain webbrowser.open() -- to send the
+player to the system default browser rather than a second native window.
+This is deliberately explicit rather than relying on
+webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"]'s implicit
+window.open() interception (still left on below, since it's the only
+thing covering app.js's other, non-Launch-Player window.open() calls):
+that setting didn't reliably fire the CoreWebView2 NewWindowRequested
+handoff on every pywebview/WebView2 combination in testing.
 
 Two ways to run this file:
   - Packaged: build.ps1's PyInstaller build bundles app/ as onedir data
@@ -86,6 +90,22 @@ def _seed_config(app_dir: str) -> None:
 
 def _local_url() -> str:
     return f"http://localhost:{PORT}/"
+
+
+class _Api:
+    """
+    js_api bridge exposed to the page as window.pywebview.api. Launch
+    Player (app/web/app.js) calls open_external() directly instead of
+    relying on webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"]'s
+    implicit window.open() interception, which doesn't reliably fire on
+    every pywebview/WebView2 combo -- this makes the OS-default-browser
+    handoff explicit instead.
+    """
+
+    def open_external(self, url):
+        import webbrowser
+
+        webbrowser.open(url)
 
 
 def _start_spincycle(app_dir: str) -> bool:
@@ -156,6 +176,7 @@ def main():
     webview.create_window(
         "Spin Cycle",
         _local_url(),
+        js_api=_Api(),
         width=width,
         height=height,
         min_size=(min_width, min_height),

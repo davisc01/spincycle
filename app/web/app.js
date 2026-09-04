@@ -463,7 +463,16 @@
   });
 
   launchPlayerBtn.addEventListener("click", () => {
-    window.open(`/player?session=${encodeURIComponent(session)}`, "_blank");
+    const path = `/player?session=${encodeURIComponent(session)}`;
+    // Windows app wrapper (deploy/windows/app.py): send the player to the
+    // OS default browser via its js_api bridge rather than window.open(),
+    // which pywebview's window doesn't reliably hand off to the system
+    // browser on its own.
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_external) {
+      window.pywebview.api.open_external(`${location.origin}${path}`);
+    } else {
+      window.open(path, "_blank");
+    }
   });
 
   // -- DJ panel (inline song browser/queue, toggled by the DJ button) ---
