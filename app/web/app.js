@@ -24,6 +24,8 @@
   const newSessionPlaylist = document.getElementById("new-session-playlist");
   const remote = document.getElementById("remote");
 
+  const tutorialToggle = document.getElementById("tutorial-toggle");
+  const tutorialPanel = document.getElementById("tutorial");
   const settingsToggle = document.getElementById("settings-toggle");
   const settingsPanel = document.getElementById("settings");
   const libraryStatus = document.getElementById("library-status");
@@ -89,7 +91,7 @@
 
   const infoVersion = document.getElementById("info-version");
   const infoRemoteLink = document.getElementById("info-remote-link");
-  const infoPlayerLink = document.getElementById("info-player-link");
+  const infoPlayerLinks = document.getElementById("info-player-links");
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
   const infoLastWarmRun = document.getElementById("info-last-warm-run");
@@ -727,6 +729,8 @@
     settingsPanel.hidden = false;
     settingsToggle.setAttribute("aria-expanded", "true");
     refreshSettings();
+    tutorialPanel.hidden = true;
+    tutorialToggle.setAttribute("aria-expanded", "false");
   }
 
   settingsToggle.addEventListener("click", () => {
@@ -735,6 +739,18 @@
     settingsToggle.setAttribute("aria-expanded", String(!isOpen));
     if (!isOpen) {
       refreshSettings();
+      tutorialPanel.hidden = true;
+      tutorialToggle.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  tutorialToggle.addEventListener("click", () => {
+    const isOpen = !tutorialPanel.hidden;
+    tutorialPanel.hidden = isOpen;
+    tutorialToggle.setAttribute("aria-expanded", String(!isOpen));
+    if (!isOpen) {
+      settingsPanel.hidden = true;
+      settingsToggle.setAttribute("aria-expanded", "false");
     }
   });
 
@@ -761,19 +777,34 @@
     infoRemoteLink.href = remoteUrl;
     infoRemoteLink.textContent = remoteUrl;
 
-    infoPlayerLink.textContent = "";
-    if (mode === "web" && session) {
-      const playerUrl = `${base}/player?session=${encodeURIComponent(session)}`;
+    await refreshPlayerLinks(base);
+  }
+
+  // Lists every currently-running session's player link (not just this
+  // tab's own selected one) -- multiple sessions can run at once, each
+  // independently, so re-fetches the live session list fresh every time
+  // the Settings panel opens rather than caching a single stale session.
+  async function refreshPlayerLinks(base) {
+    infoPlayerLinks.innerHTML = "";
+    if (mode !== "web") {
+      infoPlayerLinks.textContent = "Not applicable in console mode";
+      return;
+    }
+    const res = await fetch("/api/sessions");
+    const sessions = await res.json();
+    if (!sessions.length) {
+      infoPlayerLinks.textContent = "No sessions running";
+      return;
+    }
+    for (const s of sessions) {
+      const row = document.createElement("div");
       const link = document.createElement("a");
-      link.href = playerUrl;
+      link.href = `${base}/player?session=${encodeURIComponent(s.name)}`;
       link.target = "_blank";
       link.rel = "noopener";
-      link.textContent = playerUrl;
-      infoPlayerLink.appendChild(link);
-    } else if (mode === "web") {
-      infoPlayerLink.textContent = "Select a session first";
-    } else {
-      infoPlayerLink.textContent = "Not applicable in console mode";
+      link.textContent = `${s.name} (${s.genre || "Anything"} / ${s.era || "Anytime"})`;
+      row.appendChild(link);
+      infoPlayerLinks.appendChild(row);
     }
   }
 

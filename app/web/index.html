@@ -13,6 +13,7 @@
 <body>
   <header>
     <img class="logo" src="/images/spin_cycle_logo_full.png" alt="Spin Cycle">
+    <button id="tutorial-toggle" type="button" aria-expanded="false">Tutorial</button>
     <button id="settings-toggle" type="button" aria-expanded="false">Settings</button>
   </header>
 
@@ -93,6 +94,60 @@
 
     <button id="launch-player-btn" type="button" hidden>Launch Player</button>
   </main>
+
+  <aside id="tutorial" hidden>
+    <h2>Tutorial</h2>
+
+    <section>
+      <h3>Starting a session</h3>
+      <p>In web mode, each device or person gets their own session -- pick <strong>+ New Session</strong> from the session list (optionally starting from a saved playlist instead of the whole library), or <strong>Select</strong> a session already running to jump back into it. Picking a Genre and Era starts playback immediately -- there's no separate confirm step, and changing either one at any time (even mid-song) re-shuffles and starts playing that combination right away.</p>
+    </section>
+
+    <section>
+      <h3>Launching the player, casting, and AirPlay</h3>
+      <p>The genre/era screen is the remote control, not the video itself -- press <strong>Launch Player</strong> to open the actual video in a browser tab. That tab is a normal web page playing a normal video, so your browser/OS's own casting controls work on it directly: AirPlay in Safari, or Chrome's Cast menu, will send that tab straight to a TV or speaker. If you'd rather not cast, you can instead open the player link directly on whatever device is connected to the TV -- see "Connecting remotely" below.</p>
+    </section>
+
+    <section>
+      <h3>DJ Request</h3>
+      <p>Press <strong>DJ Request</strong> to browse every song in the current genre/era, sorted by artist, with a Queue button on each row. Queueing a track plays it next without disturbing the rest of the shuffle order -- the currently-playing and queued rows are highlighted, and the "Up next" line always shows what's coming, whether that's your queued pick or just a preview of the next shuffled track.</p>
+    </section>
+
+    <section>
+      <h3>Managing tracks</h3>
+      <p>Open <strong>Settings &gt; Tracks</strong> to add, edit, or delete songs one at a time -- the add/edit form has a <strong>Search YouTube</strong> button that looks up a song and fills in its URL for you to preview before saving. For bulk changes, use <strong>Export CSV</strong> to download the whole library as a spreadsheet, and <strong>Import CSV</strong> to bring one back in, either appending to the current library or replacing it entirely. Check off rows and use <strong>Delete selected</strong> to bulk-delete.</p>
+    </section>
+
+    <section>
+      <h3>Cache warming</h3>
+      <p>Spin Cycle downloads each video once and plays the local copy every time after, so a party doesn't depend on live internet/YouTube access. <strong>Warm cache</strong> (in Settings) walks the whole library and downloads anything missing ahead of time -- it also runs automatically in the background on startup. While it's running, the <strong>Cache</strong> column in the Tracks table updates live, track by track, so you can watch progress and see which songs failed (hover a failure for the error).</p>
+    </section>
+
+    <section>
+      <h3>Playlists</h3>
+      <p>Open <strong>Settings &gt; Playlists</strong> to build a named, curated subset of the library -- filter by genre/era, check off the songs you want, and save. A saved playlist shows up as an option when starting a new session, scoping that session's genre/era dials and shuffle to just those tracks. Editing or deleting a playlist later doesn't affect a session already running from it.</p>
+    </section>
+
+    <section>
+      <h3>Overlays</h3>
+      <p>Open <strong>Settings &gt; Overlays</strong> to create a logo + phrase banner (e.g. "Intermission...") shown across the top of the player -- useful for branding a party or marking a break. Only one overlay can be active at a time; activate/deactivate it from the overlay list.</p>
+    </section>
+
+    <section>
+      <h3>YouTube sign-in cookies</h3>
+      <p>Occasionally YouTube blocks a specific video with a "Please sign in to confirm you're not a bot" error. In <strong>Settings &gt; YouTube sign-in cookies</strong>, pick the browser you're already logged into YouTube with on this machine -- Spin Cycle will read that browser's cookies when downloading, exactly as if the request came from your own signed-in tab. Leave it set to "None" if you haven't hit that error.</p>
+    </section>
+
+    <section>
+      <h3>Connecting remotely (phone or player)</h3>
+      <p><strong>Settings &gt; Deployment info</strong> lists a <strong>Remote control</strong> link -- open it on a phone (or any device on the same network) to get the same session list and controls, so one device can start a session and cast to the TV while another acts as the controller. It also lists a <strong>Player</strong> link for every currently-running session, for when a device can't cast -- open that link directly on a smart TV's browser, or on whatever's plugged into the TV, instead of using Launch Player + casting.</p>
+    </section>
+
+    <section>
+      <h3>A few other things</h3>
+      <p><strong>Skip</strong>/<strong>Stop</strong> control playback without re-tuning the genre/era. Multiple sessions can run at once, each fully independent (its own genre/era, queue, and player) -- close one from the session list when you're done with it. <strong>Playback log</strong> (in Settings) is a running record of every play/skip/cache-miss, useful for troubleshooting. <strong>Deployment info</strong> also shows the app version and a link to the GitHub Releases page for updates.</p>
+    </section>
+  </aside>
 
   <aside id="settings" hidden>
     <h2>Settings</h2>
@@ -258,7 +313,7 @@
       <dl class="info-list">
         <dt>Version</dt><dd id="info-version"></dd>
         <dt>Remote control</dt><dd><a id="info-remote-link" href="#" target="_blank" rel="noopener"></a></dd>
-        <dt>Player (if you can't cast)</dt><dd id="info-player-link"></dd>
+        <dt>Player (if you can't cast)</dt><dd id="info-player-links"></dd>
         <dt>Playback mode</dt><dd id="info-playback-mode"></dd>
         <dt>Cache location</dt><dd id="info-cache-root"></dd>
         <dt>Last cache warm run</dt><dd id="info-last-warm-run"></dd>
