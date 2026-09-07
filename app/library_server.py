@@ -302,6 +302,8 @@ class Handler(BaseHTTPRequestHandler):
                 "locked": bool(os.environ.get("SPINCYCLE_CACHE_ROOT")),
                 "playback_mode": config.PLAYBACK_MODE,
             })
+        elif path == "/api/first-run-status":
+            self._send_json(200, self._first_run_status())
         else:
             self._send_html(404, "<h1>Not found</h1>")
 
@@ -387,6 +389,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(200, self.controller.status())
         elif path == "/api/cache-root":
             self._handle_set_cache_root()
+        elif path == "/api/first-run-complete":
+            self._handle_first_run_complete()
         else:
             self._send_html(404, "<h1>Not found</h1>")
 
@@ -605,6 +609,9 @@ class Handler(BaseHTTPRequestHandler):
         mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
         track_count = len(library.list_tracks(config.LIBRARY_DB))
         return {"exists": True, "size": stat.st_size, "mtime": mtime, "track_count": track_count}
+
+    def _first_run_status(self):
+        return {"applicable": config.IS_DESKTOP_APP, "complete": config.first_run_complete()}
 
     def _handle_download_csv(self):
         rows = library.export_csv_rows(config.LIBRARY_DB)
@@ -1156,6 +1163,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(303)
         self.send_header("Location", "/")
         self.end_headers()
+
+    def _handle_first_run_complete(self):
+        config.mark_first_run_complete()
+        start_background_warm_cache()
+        self._send_json(200, {"ok": True})
 
     def _backup_library_db(self):
         if os.path.exists(config.LIBRARY_DB):

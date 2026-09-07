@@ -12,6 +12,12 @@
   const launchPlayerBtn = document.getElementById("launch-player-btn");
   const backToSessions = document.getElementById("back-to-sessions");
 
+  const firstRunOverlay = document.getElementById("first-run-overlay");
+  const firstRunCsvInput = document.getElementById("first-run-csv-input");
+  const firstRunImportBtn = document.getElementById("first-run-import-btn");
+  const firstRunSkipBtn = document.getElementById("first-run-skip-btn");
+  const firstRunResult = document.getElementById("first-run-result");
+
   const sessionPicker = document.getElementById("session-picker");
   const sessionList = document.getElementById("session-list");
   const newSessionBtn = document.getElementById("new-session-btn");
@@ -1391,6 +1397,49 @@
   // see library_server.py's _require_session_manager) -- that's the cheap
   // way to tell which UI to show without a dedicated /api/config route.
 
+  // -- first-time setup wizard (desktop apps only) ------------------------
+  //
+  // Gated server-side by config.IS_DESKTOP_APP -- console mode and the
+  // multi-viewer container deployment always get {applicable: false} and
+  // skip straight to init(). Reuses the same /upload route (mode=replace)
+  // the Library panel's "Import CSV (replace)" button already posts to.
+
+  async function checkFirstRun() {
+    const res = await fetch("/api/first-run-status");
+    const data = await res.json();
+    if (!data.applicable || data.complete) return false;
+    firstRunOverlay.hidden = false;
+    return true;
+  }
+
+  async function finishFirstRun(message) {
+    firstRunResult.textContent = message;
+    await fetch("/api/first-run-complete", { method: "POST" });
+    firstRunOverlay.hidden = true;
+    init();
+  }
+
+  firstRunImportBtn.addEventListener("click", () => firstRunCsvInput.click());
+
+  firstRunCsvInput.addEventListener("change", async () => {
+    const file = firstRunCsvInput.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("csv", file);
+    const res = await fetch("/upload", { method: "POST", body: formData });
+    const text = await res.text();
+    if (!res.ok) {
+      firstRunResult.textContent = text;
+      firstRunResult.style.color = "var(--danger)";
+      return;
+    }
+    finishFirstRun("Library imported. Warming cache in the background...");
+  });
+
+  firstRunSkipBtn.addEventListener("click", () => {
+    finishFirstRun("Using the starter library. Warming cache in the background...");
+  });
+
   async function init() {
     const probe = await fetch("/api/sessions");
     if (probe.status === 503) {
@@ -1414,5 +1463,7 @@
     showSessionPicker();
   }
 
-  init();
+  (async () => {
+    if (!(await checkFirstRun())) init();
+  })();
 })();

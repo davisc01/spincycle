@@ -16,6 +16,19 @@
     <button id="settings-toggle" type="button" aria-expanded="false">Library</button>
   </header>
 
+  <div id="first-run-overlay" hidden>
+    <div class="first-run-card song-list-screen">
+      <h2>Welcome to Spin Cycle</h2>
+      <p>If you have your own library CSV (artist,song,genre,era,url), import it now -- it'll replace the starter list below. Otherwise just continue with the built-in starter library.</p>
+      <input type="file" id="first-run-csv-input" accept=".csv" hidden>
+      <div class="first-run-actions">
+        <button id="first-run-import-btn" type="button">Import My Library</button>
+        <button id="first-run-skip-btn" type="button">Use the Starter Library</button>
+      </div>
+      <p id="first-run-result"></p>
+    </div>
+  </div>
+
   <section id="session-picker" hidden>
     <h2>Sessions</h2>
     <p class="section-hint">Each session has its own player -- create one per person/device, or jump back into one already running.</p>

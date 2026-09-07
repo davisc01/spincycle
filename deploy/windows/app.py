@@ -135,6 +135,7 @@ def _start_spincycle(app_dir: str) -> bool:
     os.environ["SPINCYCLE_CACHE_ROOT"] = str(CACHE_DIR)
     os.environ["SPINCYCLE_CONFIG_DIR"] = str(CONFIG_DIR)
     os.environ["SPINCYCLE_SERVER_PORT"] = str(PORT)
+    os.environ["SPINCYCLE_DESKTOP_APP"] = "1"
     ffmpeg_path = _ffmpeg_location()
     if ffmpeg_path:
         os.environ["SPINCYCLE_FFMPEG_PATH"] = ffmpeg_path

@@ -110,6 +110,16 @@ def set_cache_root(path):
     _save_settings(settings)
 
 
+def first_run_complete():
+    return bool(_load_settings().get("first_run_complete"))
+
+
+def mark_first_run_complete():
+    settings = _load_settings()
+    settings["first_run_complete"] = True
+    _save_settings(settings)
+
+
 LIBRARY_FILE = os.path.join(CONFIG_DIR, "library.csv")
 # The live library store (see library.py). LIBRARY_FILE above is kept only
 # as the one-time migration source (an existing library.csv is imported
@@ -131,6 +141,12 @@ OVERLAYS_DIR = os.path.join(CONFIG_DIR, "overlays")
 PLAYBACK_MODE = os.environ.get("SPINCYCLE_PLAYBACK_MODE", "console")
 if PLAYBACK_MODE not in ("console", "web"):
     raise ValueError(f"SPINCYCLE_PLAYBACK_MODE must be 'console' or 'web', got {PLAYBACK_MODE!r}")
+
+# Set only by deploy/macos/app.py and deploy/windows/app.py -- gates the
+# web remote's first-time-setup wizard (import a library CSV or keep the
+# bundled starter list, then warm the cache), which doesn't make sense for
+# the multi-viewer container deployment or console/Pi mode.
+IS_DESKTOP_APP = os.environ.get("SPINCYCLE_DESKTOP_APP") == "1"
 
 # --- yt-dlp format selection --------------------------------------------
 # Console mode forces H.264 (avc1) at <=1080p so the Pi 4's V4L2 hardware
