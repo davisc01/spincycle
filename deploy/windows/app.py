@@ -68,6 +68,20 @@ def _app_source_dir() -> str:
     return str(Path(__file__).resolve().parent.parent.parent / "app")
 
 
+def _ffmpeg_location() -> str | None:
+    """
+    Path to ffmpeg.exe bundled alongside the packaged exe (see
+    spincycle.spec's onedir output and build.ps1's post-build copy step),
+    or None when running from source -- yt-dlp falls back to resolving
+    ffmpeg from PATH itself in that case (see README.md's Prerequisites).
+    """
+    if getattr(sys, "frozen", False):
+        bundled = Path(sys.executable).parent / "ffmpeg.exe"
+        if bundled.is_file():
+            return str(bundled)
+    return None
+
+
 def _seed_config(app_dir: str) -> None:
     """
     Copy the starter config/library.csv into %LOCALAPPDATA% on first
@@ -121,6 +135,9 @@ def _start_spincycle(app_dir: str) -> bool:
     os.environ["SPINCYCLE_CACHE_ROOT"] = str(CACHE_DIR)
     os.environ["SPINCYCLE_CONFIG_DIR"] = str(CONFIG_DIR)
     os.environ["SPINCYCLE_SERVER_PORT"] = str(PORT)
+    ffmpeg_path = _ffmpeg_location()
+    if ffmpeg_path:
+        os.environ["SPINCYCLE_FFMPEG_PATH"] = ffmpeg_path
     _seed_config(app_dir)
 
     sys.path.insert(0, app_dir)

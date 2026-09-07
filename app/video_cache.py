@@ -194,6 +194,8 @@ def ensure_cached(track, progress_hook=None, force=False):
         }
         if progress_hook:
             ydl_opts["progress_hooks"] = [progress_hook]
+        if config.FFMPEG_LOCATION:
+            ydl_opts["ffmpeg_location"] = config.FFMPEG_LOCATION
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)

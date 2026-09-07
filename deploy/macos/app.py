@@ -62,14 +62,6 @@ WINDOW_SIZE = (1100, 750)
 WINDOW_MIN_SIZE = (760, 520)
 PLAYER_WINDOW_SIZE = (960, 620)
 
-# A Dock/Finder-launched app inherits launchd's bare default PATH, not the
-# interactive shell's -- it never sees a `brew shellenv`-style PATH from
-# .zprofile. Without this, yt-dlp reports "ffmpeg is not installed" even
-# right after `brew install ffmpeg`, since Homebrew lives in
-# /opt/homebrew/bin (Apple Silicon) or /usr/local/bin (Intel), neither of
-# which is on that default PATH. Prepending both covers either Mac.
-_HOMEBREW_PATHS = ("/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin")
-
 APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Spin Cycle"
 CACHE_DIR = APP_SUPPORT_DIR / "cache"
 CONFIG_DIR = APP_SUPPORT_DIR / "config"
@@ -85,6 +77,21 @@ def _app_source_dir() -> str:
     if bundled.is_dir():
         return str(bundled)
     return str(Path(__file__).resolve().parent.parent.parent / "app")
+
+
+def _ffmpeg_location() -> str | None:
+    """
+    Path to the ffmpeg binary bundled into Contents/Resources by build.sh
+    (via dylibbundler, together with its full Homebrew dylib dependency
+    chain) -- or None when running from source, where yt-dlp falls back
+    to resolving ffmpeg from PATH itself (an interactive dev shell already
+    has Homebrew's bin dirs on PATH, unlike a Dock/Finder-launched
+    packaged app, which is exactly why the packaged path needs this).
+    """
+    bundled = Path(sys.argv[0]).resolve().parent.parent / "Resources" / "ffmpeg"
+    if bundled.is_file():
+        return str(bundled)
+    return None
 
 
 def _seed_config(app_dir: str) -> None:
@@ -142,7 +149,9 @@ def _start_spincycle(app_dir: str) -> bool:
     os.environ["SPINCYCLE_CACHE_ROOT"] = str(CACHE_DIR)
     os.environ["SPINCYCLE_CONFIG_DIR"] = str(CONFIG_DIR)
     os.environ["SPINCYCLE_SERVER_PORT"] = str(PORT)
-    os.environ["PATH"] = os.pathsep.join([*_HOMEBREW_PATHS, os.environ.get("PATH", "")])
+    ffmpeg_path = _ffmpeg_location()
+    if ffmpeg_path:
+        os.environ["SPINCYCLE_FFMPEG_PATH"] = ffmpeg_path
     _seed_config(app_dir)
     _exclude_cache_from_spotlight()
 

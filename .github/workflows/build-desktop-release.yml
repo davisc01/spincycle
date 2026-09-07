@@ -21,6 +21,9 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
+      - name: Install ffmpeg
+        run: choco install ffmpeg -y
+
       - name: Build Spin Cycle.exe
         shell: pwsh
         run: |
@@ -40,8 +43,8 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
-      - name: Install create-dmg
-        run: brew install create-dmg
+      - name: Install create-dmg, ffmpeg, dylibbundler
+        run: brew install create-dmg ffmpeg dylibbundler
 
       - name: Build Spin Cycle.app and DMG
         working-directory: deploy/macos

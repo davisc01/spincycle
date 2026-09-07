@@ -19,8 +19,12 @@ done
 echo "Using $($PYTHON --version) ($(command -v "$PYTHON"))"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "Warning: ffmpeg not found on PATH. yt-dlp needs it to mux separate" >&2
-    echo "video/audio streams -- install it with: brew install ffmpeg" >&2
+    echo "Error: ffmpeg not found on PATH. build.sh bundles it into the .app for end users -- install it: brew install ffmpeg" >&2
+    exit 1
+fi
+if ! command -v dylibbundler >/dev/null 2>&1; then
+    echo "Error: dylibbundler not found on PATH. Needed to bundle ffmpeg's Homebrew library dependencies into the .app -- install it: brew install dylibbundler" >&2
+    exit 1
 fi
 
 VENV_DIR=.venv-build
@@ -75,6 +79,22 @@ python3 setup.py py2app
 BUNDLED_APP="dist/Spin Cycle.app/Contents/Resources/app"
 find "$BUNDLED_APP" -name "__pycache__" -exec rm -rf {} +
 rm -f "$BUNDLED_APP/Dockerfile" "$BUNDLED_APP/.dockerignore"
+
+# --- Bundle ffmpeg: Homebrew's build dynamically links against dozens of
+# other Homebrew .dylibs, so a plain binary copy would only run on this
+# same machine. dylibbundler copies the whole dependency chain into
+# Contents/Resources/ffmpeg-libs and rewrites ffmpeg's (and each dylib's)
+# load commands to @executable_path-relative paths, making it fully
+# self-contained -- see app.py's _ffmpeg_location(), which points
+# SPINCYCLE_FFMPEG_PATH straight at the bundled binary instead of relying
+# on PATH.
+FFMPEG_BIN="dist/Spin Cycle.app/Contents/Resources/ffmpeg"
+cp "$(command -v ffmpeg)" "$FFMPEG_BIN"
+chmod +x "$FFMPEG_BIN"
+dylibbundler -od -b \
+    -x "$FFMPEG_BIN" \
+    -d "dist/Spin Cycle.app/Contents/Resources/ffmpeg-libs/" \
+    -p "@executable_path/ffmpeg-libs/"
 
 # py2app already ad-hoc-signed the bundle as part of the py2app step above
 # -- but editing its contents afterward (the strip above) invalidates that

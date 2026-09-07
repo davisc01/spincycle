@@ -28,8 +28,9 @@ if (-not $python) {
 }
 Write-Host "Using $(& $python[0] $python[1..($python.Length-1)] --version)"
 
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    Write-Warning "ffmpeg not found on PATH. yt-dlp needs it to mux separate video/audio streams -- install it with: winget install Gyan.FFmpeg"
+$ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
+if (-not $ffmpegCmd) {
+    throw "ffmpeg not found on PATH. yt-dlp needs it bundled into the installer -- install it with: winget install Gyan.FFmpeg"
 }
 
 $venvDir = ".venv-build"
@@ -61,6 +62,19 @@ if ($bundledApp) {
         Remove-Item -Recurse -Force
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $bundledApp.FullName "Dockerfile")
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $bundledApp.FullName ".dockerignore")
+}
+
+# --- Bundle ffmpeg: yt-dlp needs it to mux separate video/audio streams
+# (see app/config.py's FORMAT_SELECTOR) and an installed end user can't be
+# expected to have it themselves -- copy the same static build (winget's
+# Gyan.FFmpeg) just verified above straight into the onedir output, next
+# to Spin Cycle.exe, so app.py can point yt-dlp at it directly
+# (SPINCYCLE_FFMPEG_PATH) instead of relying on the end user's PATH at all.
+$ffmpegDir = Split-Path $ffmpegCmd.Source -Parent
+Copy-Item $ffmpegCmd.Source "dist\Spin Cycle\ffmpeg.exe" -Force
+$ffprobePath = Join-Path $ffmpegDir "ffprobe.exe"
+if (Test-Path $ffprobePath) {
+    Copy-Item $ffprobePath "dist\Spin Cycle\ffprobe.exe" -Force
 }
 
 # --- Installer: Inno Setup wraps the whole onedir output (exe +

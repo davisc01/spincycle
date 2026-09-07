@@ -157,6 +157,17 @@ _WEB_FORMAT_SELECTOR = (
 )
 FORMAT_SELECTOR = _CONSOLE_FORMAT_SELECTOR if PLAYBACK_MODE == "console" else _WEB_FORMAT_SELECTOR
 
+# --- ffmpeg location -------------------------------------------------------
+# yt-dlp needs ffmpeg to mux separate video/audio streams (see
+# FORMAT_SELECTOR above). The container/Pi image bundles ffmpeg via apt
+# (Dockerfile) and a bare `python3 main.py` dev run expects it on PATH --
+# both leave this unset, so yt-dlp resolves ffmpeg itself. The packaged
+# Windows/macOS apps instead bundle their own self-contained ffmpeg binary
+# (deploy/windows/build.ps1, deploy/macos/build.sh) and set this via
+# SPINCYCLE_FFMPEG_PATH, since neither can assume the end user has ffmpeg
+# installed or on PATH at all.
+FFMPEG_LOCATION = os.environ.get("SPINCYCLE_FFMPEG_PATH")
+
 # --- Playback ------------------------------------------------------------
 MPV_HWDEC = "v4l2m2m"   # hardware decode mode for Pi 4 (V4L2 M2M)
 # ALSA `hw:` fails on the Pi 4's vc4-hdmi devices ("Can't find appropriate

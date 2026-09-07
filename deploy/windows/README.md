@@ -38,11 +38,13 @@ below are only needed if you're building from source instead.
   PyInstaller support for brand-new CPython releases lags behind). Get
   one from [python.org](https://www.python.org/downloads/windows/) or
   `winget install Python.Python.3.11`.
-- **ffmpeg**, on `PATH`: `winget install Gyan.FFmpeg`. yt-dlp needs it to
-  mux separately-downloaded video/audio streams -- without it, every
-  track fails to cache (`ERROR: ... ffmpeg is not installed`). `build.ps1`
-  warns if it's missing but still builds, since the app should come up
-  either way (see `config.cache_root_problem()`).
+- **ffmpeg**, on `PATH`: `winget install Gyan.FFmpeg`. Needed only to
+  *build* the app -- `build.ps1` bundles your installed copy
+  (`ffmpeg.exe`, next to `Spin Cycle.exe`) straight into the installer and
+  points yt-dlp at it directly, so people who download the prebuilt
+  installer don't need ffmpeg themselves. `build.ps1` fails outright if
+  it's missing, since a build without it would ship exactly the "every
+  track fails to cache" bug this bundling exists to fix.
 - **WebView2 Runtime** -- already preinstalled on Windows 11 and current
   Windows 10 builds. If pywebview's window fails to open with a
   WebView2-related error, install the [Evergreen

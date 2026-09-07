@@ -50,11 +50,14 @@ launches normally.
   resolves to system-wide -- py2app support for brand-new CPython
   releases lags behind). `brew install python@3.11` if you don't have
   one.
-- **ffmpeg**, via Homebrew: `brew install ffmpeg`. yt-dlp needs it to mux
-  separately-downloaded video/audio streams -- without it, every track
-  fails to cache (`ERROR: ... ffmpeg is not installed`). `build.sh` warns
-  if it's missing but still builds, since the app should come up either
-  way (see `config.cache_root_problem()`).
+- **ffmpeg** and **dylibbundler**, via Homebrew: `brew install ffmpeg
+  dylibbundler`. Needed only to *build* the app -- `build.sh` bundles your
+  installed ffmpeg, plus every Homebrew `.dylib` it dynamically links
+  against (via dylibbundler), straight into `Spin Cycle.app` and points
+  yt-dlp at it directly, so people who download the DMG don't need
+  Homebrew or ffmpeg themselves. `build.sh` fails outright if either tool
+  is missing, since a build without them would ship exactly the "every
+  track fails to cache" bug this bundling exists to fix.
 - **create-dmg**, via Homebrew: `brew install create-dmg`. Used by
   `build.sh` to build the installer DMG.
 
