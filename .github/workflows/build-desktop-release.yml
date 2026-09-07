@@ -21,8 +21,16 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
+      # winget, not choco: Chocolatey auto-shims every .exe in a package's
+      # tools folder, so `Get-Command ffmpeg` resolves to a tiny proxy
+      # executable in C:\ProgramData\chocolatey\bin that redirects to the
+      # real binary at its original absolute path on *this* machine -- copying
+      # that shim into the installer (see build.ps1 below) produces an
+      # ffmpeg.exe that only works here, not on an end user's PC. winget
+      # installs the real static Gyan.FFmpeg build directly, matching what
+      # build.ps1's own comments and CLAUDE.md already assume.
       - name: Install ffmpeg
-        run: choco install ffmpeg -y
+        run: winget install --id Gyan.FFmpeg -e --source winget --accept-package-agreements --accept-source-agreements
 
       - name: Build Spin Cycle.exe
         shell: pwsh

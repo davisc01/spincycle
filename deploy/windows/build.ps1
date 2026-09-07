@@ -77,6 +77,18 @@ if (Test-Path $ffprobePath) {
     Copy-Item $ffprobePath "dist\Spin Cycle\ffprobe.exe" -Force
 }
 
+# Sanity-check the copy actually runs standalone -- catches a package
+# manager (e.g. Chocolatey) resolving `ffmpeg` on PATH to an auto-generated
+# shim rather than the real static binary. A shim still passes the -not
+# $ffmpegCmd check above and copies "successfully," but only works on a
+# machine that still has the original install at its original absolute
+# path -- silently producing an installer where yt-dlp reports "ffmpeg is
+# not installed" on every end user's PC. Fail the build loudly instead.
+& "dist\Spin Cycle\ffmpeg.exe" -version | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Bundled ffmpeg.exe (copied from $($ffmpegCmd.Source)) doesn't run standalone -- likely a package-manager shim rather than a real static binary. Install a real static build (winget install Gyan.FFmpeg) and retry."
+}
+
 # --- Installer: Inno Setup wraps the whole onedir output (exe +
 # _internal) into a normal Program-Files installer with a Start Menu
 # entry and an Add/Remove Programs uninstaller -- see installer.iss.

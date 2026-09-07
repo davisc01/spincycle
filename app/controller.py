@@ -364,7 +364,7 @@ class SpinCycleController:
                         return
                     self._status_message = (
                         f"No videos in {genre} / {era} could be loaded "
-                        f"(see Settings > Cache failures) -- retrying in "
+                        f"(see the Library panel's Cache column) -- retrying in "
                         f"{_ALL_TRACKS_FAILED_BACKOFF_SECONDS}s"
                     )
                     self._playlist = preview
