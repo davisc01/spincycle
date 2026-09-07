@@ -232,6 +232,23 @@
     </section>
 
     <section>
+      <h3>YouTube sign-in cookies</h3>
+      <p class="section-hint">If a video fails to cache with a "Please sign in to confirm you're not a bot" error, pick the browser you're logged into YouTube with -- yt-dlp will read its cookies for future downloads.</p>
+      <select id="cookies-browser-select">
+        <option value="">None</option>
+        <option value="chrome">Chrome</option>
+        <option value="edge">Edge</option>
+        <option value="firefox">Firefox</option>
+        <option value="brave">Brave</option>
+        <option value="safari">Safari</option>
+        <option value="opera">Opera</option>
+        <option value="vivaldi">Vivaldi</option>
+      </select>
+      <button id="cookies-browser-save-btn" type="button">Save</button>
+      <p id="cookies-browser-result"></p>
+    </section>
+
+    <section>
       <h3>Playback log</h3>
       <pre id="playback-log" class="log-pane"></pre>
     </section>

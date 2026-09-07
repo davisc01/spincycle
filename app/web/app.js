@@ -29,6 +29,9 @@
   const libraryStatus = document.getElementById("library-status");
   const warmStatus = document.getElementById("warm-status");
   const warmCacheBtn = document.getElementById("warm-cache-btn");
+  const cookiesBrowserSelect = document.getElementById("cookies-browser-select");
+  const cookiesBrowserSaveBtn = document.getElementById("cookies-browser-save-btn");
+  const cookiesBrowserResult = document.getElementById("cookies-browser-result");
   const playbackLog = document.getElementById("playback-log");
   const cacheWarning = document.getElementById("cache-warning");
   const connectionWarning = document.getElementById("connection-warning");
@@ -746,7 +749,20 @@
     infoVersion.textContent = data.app_version;
     infoPlaybackMode.textContent = data.playback_mode;
     infoCacheRoot.textContent = data.locked ? `${data.cache_root} (fixed by this deployment)` : data.cache_root;
+    cookiesBrowserSelect.value = data.ytdlp_cookies_browser || "";
   }
+
+  cookiesBrowserSaveBtn.addEventListener("click", async () => {
+    const res = await fetch("/api/ytdlp-cookies-browser", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ browser: cookiesBrowserSelect.value }),
+    });
+    cookiesBrowserResult.textContent = res.ok
+      ? (cookiesBrowserSelect.value ? `Saved -- using ${cookiesBrowserSelect.value}'s cookies for future downloads.` : "Saved -- no browser cookies will be used.")
+      : "Couldn't save that setting.";
+    cookiesBrowserResult.style.color = res.ok ? "" : "var(--danger)";
+  });
 
   async function refreshLibraryStatus() {
     const res = await fetch("/api/library-status");
@@ -762,6 +778,7 @@
     infoLastWarmRun.textContent = data.last_run || "Never (since last restart)";
     if (data.running) {
       warmStatus.textContent = `Running: ${data.current}/${data.total} — ${data.label}`;
+      refreshLibraryTracks();
       if (!warmPollTimer) {
         warmPollTimer = setInterval(refreshWarmStatus, 1500);
       }

@@ -302,6 +302,7 @@ class Handler(BaseHTTPRequestHandler):
                 "locked": bool(os.environ.get("SPINCYCLE_CACHE_ROOT")),
                 "playback_mode": config.PLAYBACK_MODE,
                 "app_version": config.APP_VERSION,
+                "ytdlp_cookies_browser": config.YTDLP_COOKIES_BROWSER,
             })
         elif path == "/api/first-run-status":
             self._send_json(200, self._first_run_status())
@@ -392,6 +393,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_set_cache_root()
         elif path == "/api/first-run-complete":
             self._handle_first_run_complete()
+        elif path == "/api/ytdlp-cookies-browser":
+            self._handle_set_ytdlp_cookies_browser()
         else:
             self._send_html(404, "<h1>Not found</h1>")
 
@@ -663,6 +666,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": f"Can't use that path: {e}"})
             return
         self._send_json(200, {"cache_root": config.CACHE_ROOT})
+
+    def _handle_set_ytdlp_cookies_browser(self):
+        try:
+            payload = self._read_json_body()
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send_json(400, {"error": str(e)})
+            return
+        config.set_ytdlp_cookies_browser(payload.get("browser"))
+        self._send_json(200, {"ytdlp_cookies_browser": config.YTDLP_COOKIES_BROWSER})
 
     # -- library tracks (CRUD, backing the Library panel's table) --------
 

@@ -110,6 +110,30 @@ def set_cache_root(path):
     _save_settings(settings)
 
 
+# yt-dlp browser name (e.g. "chrome", "firefox", "edge") to pull cookies
+# from when downloading -- see video_cache.py's ensure_cached(). Only
+# meaningful when yt-dlp runs on the same machine as that browser (true
+# for the desktop apps and a plain source-checkout dev run, not the
+# container/Pi targets), so this is opt-in via the Settings panel rather
+# than a deploy-time env var. Works around YouTube's "Please sign in to
+# confirm you're not a bot" wall on specific videos -- yt-dlp reads the
+# named browser's own cookie store (decrypting it via the OS's normal
+# credential manager) as though the request came from a signed-in tab.
+YTDLP_COOKIES_BROWSER = (_load_settings().get("ytdlp_cookies_browser") or "").strip().lower()
+
+
+def set_ytdlp_cookies_browser(browser):
+    global YTDLP_COOKIES_BROWSER
+    browser = (browser or "").strip().lower()
+    settings = _load_settings()
+    if browser:
+        settings["ytdlp_cookies_browser"] = browser
+    else:
+        settings.pop("ytdlp_cookies_browser", None)
+    _save_settings(settings)
+    YTDLP_COOKIES_BROWSER = browser
+
+
 def first_run_complete():
     return bool(_load_settings().get("first_run_complete"))
 
