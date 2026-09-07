@@ -18,6 +18,15 @@ for candidate in python3.11 python3.10; do
 done
 echo "Using $($PYTHON --version) ($(command -v "$PYTHON"))"
 
+# Shown in the web remote's Deployment info section (see config.py's
+# APP_VERSION) -- the exact tag when built at one (CI always is, via
+# `git describe --tags` right after checking out the release tag), or a
+# commit-ish description for a local dev build off no tag.
+APP_VERSION="$(git describe --tags --always 2>/dev/null || true)"
+if [ -z "$APP_VERSION" ]; then
+    APP_VERSION="dev"
+fi
+
 if ! command -v ffmpeg >/dev/null 2>&1; then
     echo "Error: ffmpeg not found on PATH. build.sh bundles it into the .app for end users -- install it: brew install ffmpeg" >&2
     exit 1
@@ -79,6 +88,7 @@ python3 setup.py py2app
 BUNDLED_APP="dist/Spin Cycle.app/Contents/Resources/app"
 find "$BUNDLED_APP" -name "__pycache__" -exec rm -rf {} +
 rm -f "$BUNDLED_APP/Dockerfile" "$BUNDLED_APP/.dockerignore"
+printf '%s' "$APP_VERSION" > "$BUNDLED_APP/VERSION"
 
 # --- Bundle ffmpeg: Homebrew's build dynamically links against dozens of
 # other Homebrew .dylibs, so a plain binary copy would only run on this

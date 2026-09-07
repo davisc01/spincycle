@@ -28,6 +28,14 @@ if (-not $python) {
 }
 Write-Host "Using $(& $python[0] $python[1..($python.Length-1)] --version)"
 
+# Shown in the web remote's Deployment info section (see config.py's
+# APP_VERSION) -- the exact tag when built at one (CI always is, via
+# `git describe --tags` right after checking out inputs.tag), or a
+# commit-ish description for a local dev build off no tag.
+$appVersion = (git describe --tags --always 2>$null)
+if (-not $appVersion) { $appVersion = "dev" }
+$appVersion = $appVersion.Trim()
+
 $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
 if (-not $ffmpegCmd) {
     throw "ffmpeg not found on PATH. yt-dlp needs it bundled into the installer -- install it with: winget install Gyan.FFmpeg"
@@ -62,6 +70,7 @@ if ($bundledApp) {
         Remove-Item -Recurse -Force
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $bundledApp.FullName "Dockerfile")
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $bundledApp.FullName ".dockerignore")
+    Set-Content -Path (Join-Path $bundledApp.FullName "VERSION") -Value $appVersion -NoNewline
 }
 
 # --- Bundle ffmpeg: yt-dlp needs it to mux separate video/audio streams

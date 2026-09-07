@@ -84,6 +84,7 @@
   const overlayCancelBtn = document.getElementById("overlay-cancel-btn");
   const overlayDeleteBtn = document.getElementById("overlay-delete-btn");
 
+  const infoVersion = document.getElementById("info-version");
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
   const infoLastWarmRun = document.getElementById("info-last-warm-run");
@@ -742,6 +743,7 @@
   async function refreshCacheRoot() {
     const res = await fetch("/api/cache-root");
     const data = await res.json();
+    infoVersion.textContent = data.app_version;
     infoPlaybackMode.textContent = data.playback_mode;
     infoCacheRoot.textContent = data.locked ? `${data.cache_root} (fixed by this deployment)` : data.cache_root;
   }

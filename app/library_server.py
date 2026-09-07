@@ -301,6 +301,7 @@ class Handler(BaseHTTPRequestHandler):
                 "problem": config.cache_root_problem(),
                 "locked": bool(os.environ.get("SPINCYCLE_CACHE_ROOT")),
                 "playback_mode": config.PLAYBACK_MODE,
+                "app_version": config.APP_VERSION,
             })
         elif path == "/api/first-run-status":
             self._send_json(200, self._first_run_status())

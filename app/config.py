@@ -120,6 +120,22 @@ def mark_first_run_complete():
     _save_settings(settings)
 
 
+# --- App version ----------------------------------------------------------
+# Shown in the web remote's Deployment info section. The packaged desktop
+# builds (deploy/windows/build.ps1, deploy/macos/build.sh) write a VERSION
+# file (the git tag/describe string at build time) into the bundled app/
+# copy right next to this file; a plain source checkout / container / Pi
+# deploy has no such file, so this reads as "dev" there instead.
+def _load_app_version():
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "VERSION"), "r", encoding="utf-8") as f:
+            return f.read().strip() or "dev"
+    except OSError:
+        return "dev"
+
+
+APP_VERSION = _load_app_version()
+
 LIBRARY_FILE = os.path.join(CONFIG_DIR, "library.csv")
 # The live library store (see library.py). LIBRARY_FILE above is kept only
 # as the one-time migration source (an existing library.csv is imported

@@ -29,8 +29,27 @@ jobs:
       # ffmpeg.exe that only works here, not on an end user's PC. winget
       # installs the real static Gyan.FFmpeg build directly, matching what
       # build.ps1's own comments and CLAUDE.md already assume.
+      #
+      # winget installs into a per-package folder under
+      # %LOCALAPPDATA%\Microsoft\WinGet\Packages and only makes that
+      # directory visible on PATH via a registry change that needs a new
+      # shell to pick up ("Path environment variable modified; restart
+      # your shell to use the new value" -- winget's own install output)
+      # -- unlike Chocolatey's shim folder, which is already on PATH by
+      # default on these runners, so nothing needed refreshing before.
+      # A later GitHub Actions step is a fresh process that doesn't see
+      # that registry change either, so explicitly find wherever winget
+      # put ffmpeg.exe and append it to $GITHUB_PATH (the supported way
+      # to extend PATH for every later step in this job) rather than
+      # relying on Get-Command finding it for free next.
       - name: Install ffmpeg
-        run: winget install --id Gyan.FFmpeg -e --source winget --accept-package-agreements --accept-source-agreements
+        run: |
+          winget install --id Gyan.FFmpeg -e --source winget --accept-package-agreements --accept-source-agreements
+          $ffmpegBin = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $ffmpegBin) {
+              throw "winget installed Gyan.FFmpeg but ffmpeg.exe wasn't found under $env:LOCALAPPDATA\Microsoft\WinGet\Packages"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $ffmpegBin.DirectoryName
 
       - name: Build Spin Cycle.exe
         shell: pwsh

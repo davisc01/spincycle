@@ -13,7 +13,7 @@
 <body>
   <header>
     <img class="logo" src="/images/spin_cycle_logo_full.png" alt="Spin Cycle">
-    <button id="settings-toggle" type="button" aria-expanded="false">Library</button>
+    <button id="settings-toggle" type="button" aria-expanded="false">Settings</button>
   </header>
 
   <div id="first-run-overlay" hidden>
@@ -95,7 +95,7 @@
   </main>
 
   <aside id="settings" hidden>
-    <h2>Library</h2>
+    <h2>Settings</h2>
 
     <section>
       <h3>Tracks</h3>
@@ -239,9 +239,11 @@
     <section>
       <h3>Deployment info</h3>
       <dl class="info-list">
+        <dt>Version</dt><dd id="info-version"></dd>
         <dt>Playback mode</dt><dd id="info-playback-mode"></dd>
         <dt>Cache location</dt><dd id="info-cache-root"></dd>
         <dt>Last cache warm run</dt><dd id="info-last-warm-run"></dd>
+        <dt>Releases</dt><dd><a href="https://github.com/davisc01/spincycle/releases" target="_blank" rel="noopener">github.com/davisc01/spincycle/releases</a></dd>
       </dl>
     </section>
   </aside>
