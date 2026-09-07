@@ -88,6 +88,8 @@
   const overlayDeleteBtn = document.getElementById("overlay-delete-btn");
 
   const infoVersion = document.getElementById("info-version");
+  const infoRemoteLink = document.getElementById("info-remote-link");
+  const infoPlayerLink = document.getElementById("info-player-link");
   const infoPlaybackMode = document.getElementById("info-playback-mode");
   const infoCacheRoot = document.getElementById("info-cache-root");
   const infoLastWarmRun = document.getElementById("info-last-warm-run");
@@ -750,6 +752,29 @@
     infoPlaybackMode.textContent = data.playback_mode;
     infoCacheRoot.textContent = data.locked ? `${data.cache_root} (fixed by this deployment)` : data.cache_root;
     cookiesBrowserSelect.value = data.ytdlp_cookies_browser || "";
+
+    // Same host:port this page itself was loaded from, just swapping in
+    // the machine's LAN IP for "localhost" -- so a phone on the same
+    // network has an address that actually resolves for it.
+    const base = `${location.protocol}//${data.lan_ip}${location.port ? `:${location.port}` : ""}`;
+    const remoteUrl = `${base}/`;
+    infoRemoteLink.href = remoteUrl;
+    infoRemoteLink.textContent = remoteUrl;
+
+    infoPlayerLink.textContent = "";
+    if (mode === "web" && session) {
+      const playerUrl = `${base}/player?session=${encodeURIComponent(session)}`;
+      const link = document.createElement("a");
+      link.href = playerUrl;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = playerUrl;
+      infoPlayerLink.appendChild(link);
+    } else if (mode === "web") {
+      infoPlayerLink.textContent = "Select a session first";
+    } else {
+      infoPlayerLink.textContent = "Not applicable in console mode";
+    }
   }
 
   cookiesBrowserSaveBtn.addEventListener("click", async () => {

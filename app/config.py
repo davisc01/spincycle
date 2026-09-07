@@ -3,6 +3,7 @@ Central configuration for Spin Cycle. Edit these paths for your setup.
 """
 import json
 import os
+import socket
 
 # --- Storage paths -----------------------------------------------------
 # Point this at your external USB drive's mount point via
@@ -293,6 +294,34 @@ LIBRARY_SERVER_PORT = int(os.environ.get("SPINCYCLE_SERVER_PORT", 80))
 
 def ensure_dirs():
     os.makedirs(VIDEO_DIR, exist_ok=True)
+
+
+def get_lan_ip():
+    """
+    Best-effort LAN IP for this machine, for the Deployment info section's
+    remote-control/player links -- so a phone on the same network has
+    something to type instead of "localhost" (which only resolves on the
+    machine running Spin Cycle itself). A UDP "connect" sends no packets
+    (UDP is connectionless) -- it just asks the OS which local interface
+    would route to the target, which is exactly the outward-facing address
+    another device on the LAN would use to reach this one. Falls back to
+    loopback if there's no route at all (no network connection).
+
+    Meaningful for the console/Pi and desktop targets, which each run
+    directly on a real host network interface. Inside a container/k8s pod
+    this returns that pod's own internal address, not necessarily whatever
+    externally-reachable address (Ingress/NodePort/Service) a phone would
+    actually need -- deliberately not solved here, see deploy/container/
+    README.md, since this repo doesn't tie itself to any one orchestrator.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 def cache_root_problem():

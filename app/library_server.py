@@ -303,6 +303,7 @@ class Handler(BaseHTTPRequestHandler):
                 "playback_mode": config.PLAYBACK_MODE,
                 "app_version": config.APP_VERSION,
                 "ytdlp_cookies_browser": config.YTDLP_COOKIES_BROWSER,
+                "lan_ip": config.get_lan_ip(),
             })
         elif path == "/api/first-run-status":
             self._send_json(200, self._first_run_status())
