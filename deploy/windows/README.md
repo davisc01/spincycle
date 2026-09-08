@@ -148,3 +148,11 @@ Same as `deploy/container`/`deploy/macos`: `library_server.py` has no
 authentication. Fine for LAN-only trust; if your network is shared with
 people you don't trust with playback/library control, that's true of
 this target too.
+
+## Third-party licenses
+
+`Spin Cycle.exe` bundles a GPL-licensed `ffmpeg.exe` binary (from the
+`Gyan.FFmpeg` winget package) alongside Spin Cycle's own MIT-licensed
+code -- see the repo root's
+[THIRD-PARTY-LICENSES.md](../../THIRD-PARTY-LICENSES.md) for what that
+means and where ffmpeg's source lives.
