@@ -52,6 +52,35 @@ below, and [`My_Video_List.csv`](My_Video_List.csv) in this repo for an
 example of a full library ready to import via the Library panel's Import
 CSV button.
 
+### Verifying a download
+
+The Windows and macOS builds aren't code-signed (no paid developer
+account behind this project), so your OS will show an "unidentified
+developer" / SmartScreen warning the first time you open one -- that's
+expected, not a sign anything's wrong. To confirm a download is exactly
+what this repo's CI built, rather than just trusting it:
+
+- **Checksums** -- every release includes a `checksums.txt` (SHA256).
+  Compare it against your download: `shasum -a 256 -c checksums.txt`
+  (macOS/Linux) or `certutil -hashfile "Spin Cycle-Windows-Setup.exe"
+  SHA256` (Windows).
+- **Build provenance** -- each installer/DMG carries a signed
+  [GitHub attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+  tying it to the exact commit and public
+  [Actions run](https://github.com/davisc01/spincycle/actions) that
+  built it. Verify with the [GitHub CLI](https://cli.github.com/):
+  `gh attestation verify "Spin Cycle-Windows-Setup.exe" -R davisc01/spincycle`.
+- **Read the build yourself** -- both build scripts
+  ([`deploy/macos/build.sh`](deploy/macos/build.sh),
+  [`deploy/windows/build.ps1`](deploy/windows/build.ps1)) and the
+  [workflow that runs them](.github/workflows/build-desktop-release.yml)
+  are plain text in this repo, so you can check exactly what goes into a
+  release rather than taking it on faith.
+- **Build it yourself** -- since the whole project is open source, the
+  surest option is to skip the prebuilt download and run that same build
+  script locally; see the target's own README (linked above) for the
+  couple of prerequisites each needs.
+
 ## Using the web remote
 
 Open the app's address in a browser on your LAN -- exactly where depends

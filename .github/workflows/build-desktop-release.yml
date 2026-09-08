@@ -16,6 +16,10 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +61,15 @@ jobs:
           cd deploy\windows
           .\build.ps1
 
+      # Ties this exact .exe to the commit/workflow run that built it via
+      # a signed, publicly-verifiable attestation (Sigstore-backed, free --
+      # no code-signing cert needed). Anyone can check it after downloading:
+      #   gh attestation verify "Spin Cycle-Windows-Setup.exe" -R davisc01/spincycle
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'deploy/windows/dist/Spin Cycle-Windows-Setup.exe'
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
@@ -65,6 +78,10 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,6 +93,11 @@ jobs:
       - name: Build Spin Cycle.app and DMG
         working-directory: deploy/macos
         run: ./build.sh
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'deploy/macos/dist/Spin Cycle-macos.dmg'
 
       - uses: actions/upload-artifact@v4
         with:
@@ -98,10 +120,18 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # Published alongside the binaries so anyone can confirm a download
+      # matches what CI actually built (`shasum -a 256 -c checksums.txt`),
+      # independent of the provenance attestation above.
+      - name: Generate checksums
+        working-directory: artifacts
+        run: sha256sum "Spin Cycle-Windows-Setup.exe" "Spin Cycle-macos.dmg" > checksums.txt
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag }}
           files: |
             artifacts/Spin Cycle-Windows-Setup.exe
             artifacts/Spin Cycle-macos.dmg
+            artifacts/checksums.txt
             My_Video_List.csv
